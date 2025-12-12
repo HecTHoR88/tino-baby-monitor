@@ -1,0 +1,8 @@
+{
+  "name": "TiNO Baby Monitor",
+  "description": "Monitor de bebés confiable con video, audio y nana.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
