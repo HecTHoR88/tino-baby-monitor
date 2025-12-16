@@ -34,7 +34,7 @@ const App: React.FC = () => {
 
   // APP VERSION CONSTANTS
   const APP_VERSION = "1.0.0";
-  const BUILD_NUMBER = "84";
+  const BUILD_NUMBER = "Release 85";
 
   const messagesMap = {
     es: [
