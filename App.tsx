@@ -33,8 +33,8 @@ const App: React.FC = () => {
   const [autoConnectId, setAutoConnectId] = useState<string | null>(null);
 
   // APP VERSION CONSTANTS
-  const APP_VERSION = "1.0.0";
-  const BUILD_NUMBER = "Release 85";
+  const APP_VERSION = "1.0.1";
+  const BUILD_NUMBER = "Release Fix";
 
   const messagesMap = {
     es: [
