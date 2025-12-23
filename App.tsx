@@ -21,7 +21,6 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<MonitorHistoryItem[]>([]);
   const [parentHistory, setParentHistory] = useState<MonitorHistoryItem[]>([]);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [selectedLogs, setSelectedLogs] = useState<MonitorHistoryItem | null>(null);
   
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [fadeStatus, setFadeStatus] = useState<'in' | 'out'>('in');
@@ -80,12 +79,12 @@ const App: React.FC = () => {
   };
 
   const handleDownloadBackup = () => {
-    const backupContent = `TiNO Baby Monitor - v1.3.7 HERMETIC\nFecha: ${new Date().toLocaleString()}\nID Dispositivo: ${getDeviceId()}\nStatus: Stable Golden Build`;
+    const backupContent = `TiNO Baby Monitor - v1.3.8\nFecha: ${new Date().toLocaleString()}\nID Dispositivo: ${getDeviceId()}\nNombre: ${currentDeviceName}`;
     const blob = new Blob([backupContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `TiNO_v1.3.7_Backup.txt`;
+    link.download = `TiNO_Backup_${currentDeviceName}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -134,9 +133,10 @@ const App: React.FC = () => {
           {activeTab === 'home' && renderHome()}
           {activeTab === 'devices' && (
             <div className="p-8 animate-fade-in pt-12">
-              <h2 className="text-5xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_devices}</h2>
-              <p className="text-slate-400 text-sm font-bold mb-10">{t.dev_subtitle}</p>
-              <div className="space-y-10">
+              <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_devices}</h2>
+              <p className="text-slate-400 text-xs font-bold mb-10">{t.dev_subtitle}</p>
+              
+              <div className="space-y-12">
                 <div>
                    <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-4">📷 {t.my_cameras}</h3>
                    {history.length > 0 ? history.map(h => (
@@ -144,47 +144,73 @@ const App: React.FC = () => {
                         <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-2xl">📹</div>
                         <div className="flex-1 overflow-hidden">
                           <p className="font-bold text-slate-800 text-md truncate">{h.name}</p>
-                          <div className="flex gap-3 mt-1">
-                            <button onClick={() => setMode(AppMode.PARENT)} className="text-[9px] text-emerald-500 font-black uppercase">{t.connect_btn}</button>
-                          </div>
+                          <button onClick={() => setMode(AppMode.PARENT)} className="text-[9px] text-indigo-500 font-black uppercase mt-1">{t.connect_btn}</button>
                         </div>
-                        <button onClick={() => handleDeleteHistory(h.id, 'monitor')} className="text-slate-300">🗑️</button>
+                        <button onClick={() => handleDeleteHistory(h.id, 'monitor')} className="text-slate-200 hover:text-rose-400 p-2">🗑️</button>
                       </div>
-                    )) : <div className="p-8 rounded-[2rem] border-2 border-dashed border-slate-200 text-center text-slate-300 uppercase text-[10px]">Vacío</div>}
+                    )) : <div className="p-8 rounded-[2rem] border-2 border-dashed border-slate-200 text-center text-slate-300 uppercase text-[10px]">{t.history_empty}</div>}
+                </div>
+
+                <div>
+                   <h3 className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-4">📱 {t.auth_receivers}</h3>
+                   {parentHistory.length > 0 ? parentHistory.map(h => (
+                      <div key={h.id} className="w-full bg-white p-5 rounded-[1.8rem] shadow-sm border border-slate-100 flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-2xl">👤</div>
+                        <div className="flex-1 overflow-hidden">
+                          <p className="font-bold text-slate-800 text-md truncate">{h.name}</p>
+                          <p className="text-[8px] text-slate-400 font-bold uppercase">{t.last_connection}: {new Date(h.lastConnected).toLocaleDateString()}</p>
+                        </div>
+                        <button onClick={() => handleDeleteHistory(h.id, 'parent')} className="text-slate-200 hover:text-rose-400 p-2">🗑️</button>
+                      </div>
+                    )) : <div className="p-8 rounded-[2rem] border-2 border-dashed border-slate-200 text-center text-slate-300 uppercase text-[10px]">{t.no_receivers}</div>}
                 </div>
               </div>
             </div>
           )}
           {activeTab === 'settings' && (
             <div className="p-8 animate-fade-in pt-12">
-               <h2 className="text-5xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_config}</h2>
+               <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_config}</h2>
                <div className="space-y-6 mt-10">
+                 
                  <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100">
-                   <h3 className="font-black text-slate-800 text-lg">{t.dev_name_title}</h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-black text-slate-800 text-lg">🌐 {t.language}</h3>
+                      <div className="flex bg-slate-100 p-1 rounded-xl">
+                        <button onClick={() => changeLanguage('es')} className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${language === 'es' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>ES</button>
+                        <button onClick={() => changeLanguage('en')} className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${language === 'en' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>EN</button>
+                      </div>
+                    </div>
+                 </div>
+
+                 <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100">
+                   <h3 className="font-black text-slate-800 text-lg">🪪 {t.dev_name_title}</h3>
                    {isEditingName ? (
                       <div className="flex gap-2 mt-4">
-                        <input value={currentDeviceName} onChange={(e) => setCurrentDeviceName(e.target.value)} className="flex-1 bg-slate-50 border rounded-xl px-4 py-3 outline-none" />
-                        <button onClick={handleSaveName} className="bg-indigo-600 text-white px-6 rounded-xl font-bold">OK</button>
+                        <input value={currentDeviceName} onChange={(e) => setCurrentDeviceName(e.target.value)} className="flex-1 bg-slate-50 border rounded-xl px-4 py-3 outline-none text-sm" />
+                        <button onClick={handleSaveName} className="bg-indigo-600 text-white px-6 rounded-xl font-bold text-sm">OK</button>
                       </div>
                    ) : (
-                      <div onClick={() => setIsEditingName(true)} className="bg-slate-50 p-4 rounded-2xl flex justify-between items-center mt-4">
-                        <span className="font-black text-slate-700">{currentDeviceName}</span>
+                      <div onClick={() => setIsEditingName(true)} className="bg-slate-50 p-4 rounded-2xl flex justify-between items-center mt-4 cursor-pointer">
+                        <span className="font-black text-slate-700 text-sm">{currentDeviceName}</span>
                         <button className="text-indigo-500 text-xs font-black">{t.edit_btn}</button>
                       </div>
                    )}
                  </div>
+
                  <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100">
                     <h3 className="font-black text-slate-800 text-lg mb-4">{t.backup_title}</h3>
                     <button onClick={handleDownloadBackup} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] tracking-widest uppercase shadow-lg shadow-emerald-200">{t.backup_btn}</button>
                  </div>
+
                </div>
             </div>
           )}
         </div>
+        
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/90 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60]">
-          <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center flex-1 ${activeTab === 'home' ? 'text-indigo-600' : 'text-slate-300'}`}>🏠<span className="text-[8px] font-black uppercase">Home</span></button>
-          <button onClick={() => setActiveTab('devices')} className={`flex flex-col items-center flex-1 ${activeTab === 'devices' ? 'text-indigo-600' : 'text-slate-300'}`}>📡<span className="text-[8px] font-black uppercase">Equipos</span></button>
-          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center flex-1 ${activeTab === 'settings' ? 'text-indigo-600' : 'text-slate-300'}`}>⚙️<span className="text-[8px] font-black uppercase">Ajustes</span></button>
+          <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'home' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>🏠<span className="text-[8px] font-black uppercase">{t.tab_home}</span></button>
+          <button onClick={() => setActiveTab('devices')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>📡<span className="text-[8px] font-black uppercase">{t.tab_devices}</span></button>
+          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>⚙️<span className="text-[8px] font-black uppercase">{t.tab_config}</span></button>
         </div>
       </div>
     );
