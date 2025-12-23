@@ -175,7 +175,7 @@ const App: React.FC = () => {
                <h2 className="text-2xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_config}</h2>
                <div className="space-y-6 mt-10">
                  
-                 <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100 max-w-[280px]">
+                 <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100">
                     <div className="flex items-center justify-between gap-4">
                       <h3 className="font-black text-slate-800 text-lg whitespace-nowrap">🌐 {t.language}</h3>
                       <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
@@ -185,7 +185,7 @@ const App: React.FC = () => {
                     </div>
                  </div>
 
-                 <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100">
+                 <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100">
                    <h3 className="font-black text-slate-800 text-lg">🪪 {t.dev_name_title}</h3>
                    {isEditingName ? (
                       <div className="flex gap-2 mt-4">
@@ -200,7 +200,7 @@ const App: React.FC = () => {
                    )}
                  </div>
 
-                 <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100">
+                 <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100">
                     <h3 className="font-black text-slate-800 text-lg mb-4">{t.backup_title}</h3>
                     <button onClick={handleDownloadBackup} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[10px] tracking-widest uppercase shadow-lg shadow-emerald-200">{t.backup_btn}</button>
                  </div>
