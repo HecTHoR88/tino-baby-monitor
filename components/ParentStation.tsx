@@ -236,7 +236,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                   if (code) { 
                       stopScanner(); 
                       try {
-                          const payload = JSON.stringify(code.data);
                           const parsed = JSON.parse(code.data);
                           setConnectionId(parsed.id); handleConnect(parsed.id, parsed.token);
                       } catch {
@@ -282,15 +281,17 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                   <button onClick={() => handleConnect(connectionId)} className="bg-slate-800 text-white px-5 rounded-xl font-bold">Ir</button>
               </div>
               <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-4 ml-2">{t.conn_history}</h3>
-              {history.map(h => (
-                  <button key={h.id} onClick={() => handleConnect(h.id, h.token)} className="w-full bg-white p-4 rounded-2xl mb-3 flex items-center gap-4 hover:shadow-md border border-slate-100 transition-all active:scale-95 text-left">
+              {history.length > 0 ? history.map(h => (
+                  <button key={h.id} onClick={() => { setConnectionId(h.id); handleConnect(h.id, h.token); }} className="w-full bg-white p-4 rounded-2xl mb-3 flex items-center gap-4 hover:shadow-md border border-slate-100 transition-all active:scale-95 text-left">
                       <div className="w-12 h-12 rounded-full bg-sky-50 flex items-center justify-center text-xl">👶</div>
                       <div className="flex-1 overflow-hidden">
                         <p className="text-slate-800 font-bold truncate">{h.name}</p>
                         <p className="text-slate-400 text-[10px] font-bold uppercase">{t.last_connection}: {new Date(h.lastConnected).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
                       </div>
                   </button>
-              ))}
+              )) : (
+                <div className="p-8 text-center text-slate-300 text-[10px] uppercase font-bold border-2 border-dashed border-slate-200 rounded-2xl">{t.history_empty}</div>
+              )}
           </div>
       </div>
   );

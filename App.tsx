@@ -12,6 +12,9 @@ import { InstallPrompt } from './components/InstallPrompt';
 const PHRASE_INTERVAL = 15000;
 const FADE_DURATION = 1500;
 
+// Estilo de degradado v85 Reforzado (Celeste cielo y Rosado suave)
+const V85_GRADIENT = { background: 'linear-gradient(180deg, #bae6fd 0%, #fce7f3 100%)' };
+
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.SELECTION);
   const [activeTab, setActiveTab] = useState<'home' | 'devices' | 'settings'>('home');
@@ -127,13 +130,13 @@ const App: React.FC = () => {
     if (mode === AppMode.MONITOR) return <BabyMonitor onBack={() => { setMode(AppMode.SELECTION); refreshHistory(); }} lang={language} />;
     if (mode === AppMode.PARENT) return <ParentStation onBack={() => { setMode(AppMode.SELECTION); refreshHistory(); }} lang={language} />;
     return (
-      <div className="flex flex-col h-full bg-slate-50 relative overflow-hidden">
+      <div className="flex flex-col h-full relative overflow-hidden" style={V85_GRADIENT}>
         {showTutorial && <TutorialModal lang={language} onClose={() => setShowTutorial(false)} />}
         <div className="flex-1 overflow-y-auto no-scrollbar pb-32">
           {activeTab === 'home' && renderHome()}
           {activeTab === 'devices' && (
             <div className="p-8 animate-fade-in pt-12">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_devices}</h2>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_devices}</h2>
               <p className="text-slate-400 text-xs font-bold mb-10">{t.dev_subtitle}</p>
               
               <div className="space-y-12">
@@ -144,7 +147,7 @@ const App: React.FC = () => {
                         <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-2xl">📹</div>
                         <div className="flex-1 overflow-hidden">
                           <p className="font-bold text-slate-800 text-md truncate">{h.name}</p>
-                          <button onClick={() => setMode(AppMode.PARENT)} className="text-[9px] text-indigo-500 font-black uppercase mt-1">{t.connect_btn}</button>
+                          <button onClick={() => { setMode(AppMode.PARENT); }} className="text-[9px] text-indigo-500 font-black uppercase mt-1">{t.connect_btn}</button>
                         </div>
                         <button onClick={() => handleDeleteHistory(h.id, 'monitor')} className="text-slate-200 hover:text-rose-400 p-2">🗑️</button>
                       </div>
@@ -169,13 +172,13 @@ const App: React.FC = () => {
           )}
           {activeTab === 'settings' && (
             <div className="p-8 animate-fade-in pt-12">
-               <h2 className="text-3xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_config}</h2>
+               <h2 className="text-2xl font-black text-slate-900 tracking-tighter mb-2">{t.tab_config}</h2>
                <div className="space-y-6 mt-10">
                  
-                 <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-black text-slate-800 text-lg">🌐 {t.language}</h3>
-                      <div className="flex bg-slate-100 p-1 rounded-xl">
+                 <div className="bg-white p-7 rounded-[2.2rem] shadow-sm border border-slate-100 max-w-[280px]">
+                    <div className="flex items-center justify-between gap-4">
+                      <h3 className="font-black text-slate-800 text-lg whitespace-nowrap">🌐 {t.language}</h3>
+                      <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
                         <button onClick={() => changeLanguage('es')} className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${language === 'es' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>ES</button>
                         <button onClick={() => changeLanguage('en')} className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${language === 'en' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>EN</button>
                       </div>
@@ -216,7 +219,7 @@ const App: React.FC = () => {
     );
   };
 
-  return <div className="h-full w-full fixed inset-0 overflow-hidden font-sans select-none bg-slate-50">{renderContent()}</div>;
+  return <div className="h-full w-full fixed inset-0 overflow-hidden font-sans select-none" style={V85_GRADIENT}>{renderContent()}</div>;
 };
 
 export default App;
