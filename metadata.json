@@ -1,6 +1,6 @@
 {
   "name": "TiNO Baby Monitor",
-  "description": "Monitor de bebés confiable con video, audio y nana.",
+  "description": "Sistema de monitoreo inteligente para bebés.",
   "requestFramePermissions": [
     "camera",
     "microphone"

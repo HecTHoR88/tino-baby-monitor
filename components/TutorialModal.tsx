@@ -16,19 +16,19 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ lang, onClose }) =
       icon: "📱 ↔️ 📱",
       title: t.tut_1_title,
       desc: t.tut_1_desc,
-      color: "bg-indigo-50 text-indigo-600"
+      color: "bg-indigo-50 text-indigo-600 shadow-indigo-100"
     },
     {
       icon: "📷 ⚡ 📲",
       title: t.tut_2_title,
       desc: t.tut_2_desc,
-      color: "bg-purple-50 text-purple-600"
+      color: "bg-purple-50 text-purple-600 shadow-purple-100"
     },
     {
       icon: "🧠 🔔 🎵",
       title: t.tut_3_title,
       desc: t.tut_3_desc,
-      color: "bg-pink-50 text-pink-600"
+      color: "bg-pink-50 text-pink-600 shadow-pink-100"
     }
   ];
 
@@ -41,36 +41,38 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ lang, onClose }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-6 animate-fade-in" onClick={onClose}>
-      <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden relative" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-lg p-6 animate-fade-in" onClick={onClose}>
+      <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden relative" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
-        <div className="p-6 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-slate-800">{t.tut_title}</h2>
-          <button onClick={onClose} className="text-slate-400 text-sm font-bold hover:text-slate-600">{t.tut_skip}</button>
+        <div className="p-8 pb-4 flex justify-between items-center">
+          <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em]">{t.tut_title}</h2>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-bold hover:bg-slate-200 transition-colors">✕</button>
         </div>
 
         {/* Content */}
-        <div className="px-8 py-4 flex flex-col items-center text-center min-h-[200px]">
-          <div className={`w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mb-6 shadow-sm transition-all duration-500 ${steps[step].color}`}>
+        <div className="px-10 py-6 flex flex-col items-center text-center">
+          <div className={`w-24 h-24 rounded-[2rem] flex items-center justify-center text-4xl mb-8 shadow-2xl transition-all duration-500 transform ${steps[step].color}`}>
             {steps[step].icon}
           </div>
-          <h3 className="text-2xl font-extrabold text-slate-800 mb-3 transition-all duration-300">{steps[step].title}</h3>
-          <p className="text-slate-500 leading-relaxed text-sm transition-all duration-300">{steps[step].desc}</p>
+          <h3 className="text-3xl font-black text-slate-900 mb-4 tracking-tight leading-tight">{steps[step].title}</h3>
+          <p className="text-slate-500 leading-relaxed font-medium text-sm mb-4">
+            {steps[step].desc}
+          </p>
         </div>
 
         {/* Navigation */}
-        <div className="p-6 pt-2">
+        <div className="p-10 pt-2">
           {/* Dots */}
-          <div className="flex justify-center gap-2 mb-6">
+          <div className="flex justify-center gap-2.5 mb-8">
             {steps.map((_, i) => (
-              <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === step ? 'w-8 bg-slate-800' : 'w-2 bg-slate-200'}`}></div>
+              <div key={i} className={`h-2 rounded-full transition-all duration-500 ${i === step ? 'w-10 bg-indigo-600 shadow-lg shadow-indigo-200' : 'w-2 bg-slate-200'}`}></div>
             ))}
           </div>
 
           <button 
             onClick={handleNext}
-            className="w-full bg-slate-800 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-slate-700 active:scale-95 transition-all"
+            className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black tracking-widest uppercase text-xs shadow-xl hover:bg-indigo-600 active:scale-95 transition-all"
           >
             {step === steps.length - 1 ? t.tut_start : t.tut_next}
           </button>

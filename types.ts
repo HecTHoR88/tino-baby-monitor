@@ -1,14 +1,14 @@
 export enum AppMode {
   SELECTION = 'SELECTION',
-  MONITOR = 'MONITOR', // The device with the baby
-  PARENT = 'PARENT'    // The receiving device
+  MONITOR = 'MONITOR',
+  PARENT = 'PARENT'
 }
 
 export type Language = 'es' | 'en';
 
 export interface AIAnalysisResult {
   status: 'sleeping' | 'awake' | 'crying' | 'not_detected' | 'unknown';
-  safetyScore: number; // 0-100
+  safetyScore: number;
   description: string;
   timestamp: number;
 }
@@ -17,17 +17,19 @@ export type RemoteCommand =
   | { type: 'CMD_FLASH'; value: boolean }
   | { type: 'CMD_LULLABY'; value: boolean }
   | { type: 'CMD_QUALITY'; value: 'high' | 'medium' | 'low' }
-  | { type: 'CMD_NOTIFICATION'; title: string; body: string };
+  | { type: 'CMD_NOTIFICATION'; title: string; body: string }
+  | { type: 'INFO_CAMERA_TYPE'; value: 'user' | 'environment' };
 
 export interface MonitorHistoryItem {
   id: string;
-  name: string; // e.g., "Monitor 1" or date
+  name: string;
   lastConnected: number;
-  token?: string; // Auth token
+  token?: string;
+  logs?: number[]; // Lista de timestamps de conexiones pasadas
 }
 
 export interface BatteryState {
-  level: number; // 0 to 1
+  level: number;
   charging: boolean;
 }
 

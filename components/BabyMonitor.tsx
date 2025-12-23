@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Peer, MediaConnection, DataConnection } from 'peerjs';
 import QRCode from 'qrcode';
@@ -31,15 +30,14 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   const [isNightVision, setIsNightVision] = useState(false);
   const [isLullabyOn, setIsLullabyOn] = useState(false);
   const [showQrPanel, setShowQrPanel] = useState(true);
+  const [isReceivingVoice, setIsReceivingVoice] = useState(false); 
   
-  // SETTINGS STATE
   const [showSettings, setShowSettings] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [currentQuality, setCurrentQuality] = useState<'high' | 'medium' | 'low'>('medium');
   const [micEnabled, setMicEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   
-  // POWER SAVING STATE
   const [powerSaving, setPowerSaving] = useState(false);
   const [isDimmed, setIsDimmed] = useState(false);
   const [useDefaultDim, setUseDefaultDim] = useState(true);
@@ -47,18 +45,30 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   
   const peerRef = useRef<Peer | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<MediaStream | null>(null); 
   const activeCallsRef = useRef<MediaConnection[]>([]);
   const activeDataConnsRef = useRef<DataConnection[]>([]);
   const analysisIntervalRef = useRef<any>(null);
+  
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const whiteNoiseNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const lullabyGainRef = useRef<GainNode | null>(null);
+  const lullabySourceRef = useRef<AudioBufferSourceNode | null>(null);
+
   const batteryRef = useRef<any>(null);
   const lastNotificationTimeRef = useRef<number>(0);
   const inactivityTimerRef = useRef<any>(null);
 
   const notificationsEnabledRef = useRef(notificationsEnabled);
   useEffect(() => { notificationsEnabledRef.current = notificationsEnabled; }, [notificationsEnabled]);
+
+  const unlockAudio = () => {
+    if (remoteAudioRef.current) {
+        remoteAudioRef.current.play().then(() => {
+            remoteAudioRef.current?.pause();
+        }).catch(() => {});
+    }
+  };
 
   const resetInactivityTimer = () => {
       if (!powerSaving) return;
@@ -72,22 +82,17 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   useEffect(() => {
       if (powerSaving) {
           resetInactivityTimer();
-          window.addEventListener('touchstart', resetInactivityTimer);
-          window.addEventListener('click', resetInactivityTimer);
-          window.addEventListener('mousemove', resetInactivityTimer);
+          const events = ['touchstart', 'click', 'mousemove', 'keydown'];
+          events.forEach(ev => window.addEventListener(ev, resetInactivityTimer));
+          return () => events.forEach(ev => window.removeEventListener(ev, resetInactivityTimer));
       } else {
           setIsDimmed(false);
           if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
       }
-      return () => {
-          window.removeEventListener('touchstart', resetInactivityTimer);
-          window.removeEventListener('click', resetInactivityTimer);
-          window.removeEventListener('mousemove', resetInactivityTimer);
-          if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-      };
   }, [powerSaving]);
 
   useEffect(() => {
+    unlockAudio();
     let token = secureStorage.getItem<string>('tino_conn_token');
     if (!token) {
         token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
@@ -132,25 +137,23 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   const saveParentToHistory = (uniqueId: string, name: string) => {
       try {
           const now = Date.now();
-          const history = secureStorage.getItem<MonitorHistoryItem[]>('parent_history') || [];
-          const existingIndex = history.findIndex(h => h.id === uniqueId);
+          const currentHistory = secureStorage.getItem<MonitorHistoryItem[]>('parent_history') || [];
+          const existingIndex = currentHistory.findIndex(h => h.id === uniqueId);
           let newHistory;
+
           if (existingIndex >= 0) {
-              const updatedItem = { ...history[existingIndex], name, lastConnected: now };
-              const others = history.filter(h => h.id !== uniqueId);
+              const oldItem = currentHistory[existingIndex];
+              const oldLogs = oldItem.logs || [];
+              const newLogs = [now, ...oldLogs].slice(0, 50);
+              const updatedItem = { ...oldItem, name, lastConnected: now, logs: newLogs };
+              const others = currentHistory.filter(h => h.id !== uniqueId);
               newHistory = [updatedItem, ...others];
           } else {
-              const newItem: MonitorHistoryItem = { id: uniqueId, name, lastConnected: now };
-              newHistory = [newItem, ...history];
+              const newItem: MonitorHistoryItem = { id: uniqueId, name, lastConnected: now, logs: [now] };
+              newHistory = [newItem, ...currentHistory];
           }
           secureStorage.setItem('parent_history', newHistory.slice(0, 20));
-          const logs = secureStorage.getItem<Record<string, number[]>>('parent_connection_logs') || {};
-          const deviceLogs = logs[uniqueId] || [];
-          if (deviceLogs.length === 0 || (now - deviceLogs[0]) > 5000) {
-             logs[uniqueId] = [now, ...deviceLogs].slice(0, 50); 
-             secureStorage.setItem('parent_connection_logs', logs);
-          }
-      } catch (e) { }
+      } catch (e) { console.error("Error guardando historial padres", e); }
   };
 
   const getConstraints = (quality: 'high' | 'medium' | 'low') => {
@@ -179,7 +182,16 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           });
 
           streamRef.current = mediaStream;
-          setFacingMode(faceMode);
+          
+          const videoTrack = mediaStream.getVideoTracks()[0];
+          const settings = videoTrack.getSettings();
+          
+          let actualFacing = settings.facingMode as any || faceMode;
+          const isPC = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          
+          if (isPC || faceMode === 'user') actualFacing = 'user';
+          
+          setFacingMode(actualFacing);
           setCurrentQuality(quality);
 
           mediaStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
@@ -206,10 +218,12 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
 
       } catch (error) {
           console.error("Failed to start stream:", error);
-          if (quality === 'high') {
+          if (faceMode === 'environment') {
+              startStream('user', quality);
+          } else if (quality === 'high') {
               startStream(faceMode, 'medium');
           } else {
-              alert("Error al acceder a la cámara. Cierre otras apps que la usen.");
+              alert("Error al acceder a la cámara.");
           }
       }
   };
@@ -256,7 +270,24 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     });
 
     peer.on('open', (id) => { setPeerId(id); setServerStatus('connected'); generateSecureQR(id, token); });
-    peer.on('call', (call) => { call.answer(); });
+    
+    peer.on('call', (call) => { 
+        call.answer(); 
+        setIsReceivingVoice(true);
+        call.on('stream', (remoteStream) => {
+            if (remoteAudioRef.current) {
+                remoteAudioRef.current.srcObject = remoteStream;
+                const playAudio = () => {
+                    remoteAudioRef.current?.play().catch(e => {
+                        console.warn("Retrying playback...");
+                        setTimeout(playAudio, 500);
+                    });
+                };
+                playAudio();
+            }
+        });
+        call.on('close', () => setIsReceivingVoice(false));
+    });
     
     peer.on('connection', (conn) => {
         const incomingToken = (conn.metadata as any)?.token;
@@ -271,9 +302,9 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
         conn.on('open', () => { 
             activeDataConnsRef.current.push(conn);
             conn.send({ type: 'INFO_DEVICE_NAME', name: getDeviceName() });
-
+            
             const metadata = conn.metadata as any;
-            const deviceName = metadata?.name || `Dispositivo ${conn.peer.substr(0,4)}`;
+            const deviceName = metadata?.name || `Padre ${conn.peer.substr(0,4)}`;
             const deviceId = metadata?.deviceId || conn.peer;
 
             setConnectedPeers(prev => {
@@ -373,23 +404,64 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     if (enable) {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         const ctx = audioCtxRef.current;
-        const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+        const bufferSize = ctx.sampleRate * 2;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const data = buffer.getChannelData(0);
-        for (let i = 0; i < buffer.length; i++) data[i] = Math.random() * 2 - 1;
+        let lastOut = 0.0;
+        for (let i = 0; i < bufferSize; i++) {
+            let white = Math.random() * 2 - 1;
+            lastOut = (lastOut + (0.02 * white)) / 1.02;
+            data[i] = lastOut * 3.5; 
+        }
         const noise = ctx.createBufferSource();
-        noise.buffer = buffer; noise.loop = true;
-        const gain = ctx.createGain(); gain.gain.value = 0.05;
-        noise.connect(gain); gain.connect(ctx.destination);
-        noise.start(); whiteNoiseNodeRef.current = noise;
-    } else { stopLullaby(); }
+        noise.buffer = buffer;
+        noise.loop = true;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 450; 
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 2); 
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        noise.start();
+        lullabySourceRef.current = noise;
+        lullabyGainRef.current = gain;
+    } else { 
+        stopLullaby(); 
+    }
   };
-  const stopLullaby = () => { if (whiteNoiseNodeRef.current) { try { whiteNoiseNodeRef.current.stop(); } catch(e){} whiteNoiseNodeRef.current = null; } setIsLullabyOn(false); };
+
+  const stopLullaby = () => { 
+      if (lullabySourceRef.current && lullabyGainRef.current && audioCtxRef.current) { 
+          const ctx = audioCtxRef.current;
+          const gain = lullabyGainRef.current;
+          const source = lullabySourceRef.current;
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1);
+          setTimeout(() => {
+              try { source.stop(); } catch(e){}
+          }, 1000);
+          lullabySourceRef.current = null;
+          lullabyGainRef.current = null;
+      } 
+      setIsLullabyOn(false); 
+  };
 
   const dimOpacity = 1 - (useDefaultDim ? 0.1 : (dimBrightness / 100));
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden relative font-sans">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden relative font-sans" onClick={unlockAudio}>
+      <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
       
+      {isReceivingVoice && (
+          <div className="fixed inset-0 pointer-events-none z-[100] flex items-center justify-center animate-pulse">
+              <div className="bg-indigo-500/10 border-4 border-indigo-500/20 p-12 rounded-full backdrop-blur-sm">
+                  <span className="text-7xl opacity-20">📢</span>
+              </div>
+          </div>
+      )}
+
       {isDimmed && (
           <div 
             className="absolute inset-0 z-50 flex flex-col items-center justify-center text-white/40 cursor-pointer backdrop-blur-sm transition-all duration-500" 
@@ -415,11 +487,7 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
             )}
         </div>
         <div className="flex gap-3">
-            {/* SETTINGS BUTTON */}
-            <button 
-                onClick={() => setShowSettings(true)} 
-                className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-700 hover:bg-white transition-colors active:scale-95"
-            >
+            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-700 hover:bg-white transition-colors active:scale-95">
                 <span className="text-xl">⚙️</span>
             </button>
             <button onClick={onBack} className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-500 hover:bg-white transition-colors active:scale-95">✕</button>
@@ -432,11 +500,10 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
             autoPlay 
             playsInline 
             muted 
-            className="w-full h-full object-cover"
-            style={{ 
-              transform: facingMode === 'user' ? 'rotateY(180deg)' : 'none' 
-            }}
+            className="w-full h-full object-cover transition-transform duration-500"
+            style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
         />
+        
         <div className="absolute bottom-6 left-6 flex flex-col gap-2">
             <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-sky-600 text-xs font-bold animate-pulse shadow-sm flex items-center gap-2">🧠 {t.ai_active}</div>
             {isLullabyOn && <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-indigo-500 text-xs font-bold animate-pulse shadow-sm flex items-center gap-2">🎵 {t.lullaby_active}</div>}
@@ -475,23 +542,12 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
                             </div>
                         </div>
                     )}
-                    <div className="flex items-center gap-2 text-slate-400 text-xs font-medium bg-slate-100/50 px-4 py-2 rounded-full">
-                        <span>📡</span> ID: {peerId.substring(0,8)}...
-                    </div>
                 </div>
             ) : (
                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-3xl w-full max-w-sm border border-emerald-100 shadow-sm">
                     <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center text-4xl mb-4">🛡️</div>
                     <h3 className="text-xl font-bold text-emerald-600">{t.max_users}</h3>
                     <p className="text-slate-400 mt-2 text-sm">{t.max_users_desc}</p>
-                    <div className="mt-6 w-full space-y-2">
-                        {connectedPeers.map(peer => (
-                            <div key={peer.id} className="bg-slate-50 p-3 rounded-xl flex items-center gap-3">
-                                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center text-xs">✓</div>
-                                <span className="text-xs font-bold text-slate-600">{peer.name}</span>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
           </div>
@@ -505,107 +561,59 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
                       <button onClick={() => setShowSettings(false)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold hover:bg-slate-200 transition-colors">✕</button>
                   </div>
 
-                  {/* Section 1: Camera */}
                   <div>
                       <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pl-1">{t.cam_select}</h3>
                       <div className="flex bg-slate-100 p-1 rounded-xl">
-                          <button 
-                            onClick={() => changeCamera('environment')}
-                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${facingMode === 'environment' ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white' : 'bg-transparent text-slate-500 shadow-none hover:bg-white/50'}`}
-                          >{t.back_cam}</button>
-                          <button 
-                            onClick={() => changeCamera('user')}
-                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${facingMode === 'user' ? 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white' : 'bg-transparent text-slate-500 shadow-none hover:bg-white/50'}`}
-                          >{t.front_cam}</button>
+                          <button onClick={() => changeCamera('environment')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${facingMode === 'environment' ? 'bg-gradient-to-r from-indigo-500 to-pink-500 text-white' : 'text-slate-500'}`}>{t.back_cam}</button>
+                          <button onClick={() => changeCamera('user')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${facingMode === 'user' ? 'bg-gradient-to-r from-indigo-500 to-pink-500 text-white' : 'text-slate-500'}`}>{t.front_cam}</button>
                       </div>
                   </div>
 
-                  {/* Section 2: Microphone */}
                   <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-colors ${micEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>🎙️</div>
-                          <div>
-                              <h3 className="font-bold text-slate-800 text-sm">{t.mic_title}</h3>
-                              <p className="text-[10px] text-slate-400">{micEnabled ? t.mic_on : t.mic_off}</p>
-                          </div>
-                      </div>
+                      <h3 className="font-bold text-slate-800 text-sm">{t.mic_title}</h3>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={micEnabled} onChange={(e) => toggleMic(e.target.checked)} />
-                        <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500 shadow-inner"></div>
+                        <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-indigo-500 shadow-inner after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
                       </label>
                   </div>
 
-                  {/* Section 3: Resolution */}
                   <div>
                       <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pl-1">{t.res_title}</h3>
                       <div className="flex bg-slate-100 p-1 rounded-xl">
-                          <button onClick={() => changeQuality('low')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${currentQuality === 'low' ? 'bg-indigo-500 text-white' : 'bg-transparent text-slate-500 shadow-none hover:bg-white/50'}`}>Eco</button>
-                          <button onClick={() => changeQuality('medium')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${currentQuality === 'medium' ? 'bg-indigo-500 text-white' : 'bg-transparent text-slate-500 shadow-none hover:bg-white/50'}`}>SD</button>
-                          <button onClick={() => changeQuality('high')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all shadow-sm ${currentQuality === 'high' ? 'bg-indigo-500 text-white' : 'bg-transparent text-slate-500 shadow-none hover:bg-white/50'}`}>HD</button>
+                          <button onClick={() => changeQuality('low')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${currentQuality === 'low' ? 'bg-indigo-500 text-white' : 'text-slate-500'}`}>Eco</button>
+                          <button onClick={() => changeQuality('medium')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${currentQuality === 'medium' ? 'bg-indigo-500 text-white' : 'text-slate-500'}`}>SD</button>
+                          <button onClick={() => changeQuality('high')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${currentQuality === 'high' ? 'bg-indigo-500 text-white' : 'text-slate-500'}`}>HD</button>
                       </div>
                   </div>
 
-                  {/* Section 4: AI Alerts */}
                   <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-colors ${notificationsEnabled ? 'bg-rose-50 text-rose-500' : 'bg-slate-100 text-slate-400'}`}>🔔</div>
-                          <div>
-                              <h3 className="font-bold text-slate-800 text-sm">{t.ai_alerts}</h3>
-                              <p className="text-[10px] text-slate-400">{t.ai_desc}</p>
-                          </div>
-                      </div>
+                      <h3 className="font-bold text-slate-800 text-sm">{t.ai_alerts}</h3>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={notificationsEnabled} onChange={(e) => setNotificationsEnabled(e.target.checked)} />
-                        <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500 shadow-inner"></div>
+                        <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-rose-500 shadow-inner after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
                       </label>
                   </div>
 
-                  {/* Section 5: Power Saving */}
                   <div className="space-y-3 pt-2 border-t border-slate-100">
                       <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-colors ${powerSaving ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>🔋</div>
-                              <div>
-                                  <h3 className="font-bold text-slate-800 text-sm">{t.power_save}</h3>
-                                  <p className="text-[10px] text-slate-400">{t.power_desc}</p>
-                              </div>
-                          </div>
+                          <h3 className="font-bold text-slate-800 text-sm">{t.power_save}</h3>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" className="sr-only peer" checked={powerSaving} onChange={(e) => setPowerSaving(e.target.checked)} />
-                            <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
+                            <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 shadow-inner after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
                           </label>
                       </div>
-
                       {powerSaving && (
-                          <div className="bg-slate-50 p-3 rounded-xl space-y-2 animate-fade-in">
-                              <div className="flex items-center gap-2 mb-1">
-                                  <input 
-                                    type="checkbox" 
-                                    className="accent-indigo-600 w-3 h-3"
-                                    checked={useDefaultDim}
-                                    onChange={(e) => setUseDefaultDim(e.target.checked)}
-                                  />
+                          <div className="bg-slate-50 p-3 rounded-xl space-y-2">
+                              <div className="flex items-center gap-2">
+                                  <input type="checkbox" className="accent-indigo-600" checked={useDefaultDim} onChange={(e) => setUseDefaultDim(e.target.checked)} />
                                   <span className="text-[10px] font-bold text-slate-600">{t.dim_default}</span>
                               </div>
-                              
                               {!useDefaultDim && (
-                                  <div className="space-y-1">
-                                      <input 
-                                        type="range" 
-                                        min="0" 
-                                        max="50" 
-                                        step="5"
-                                        value={dimBrightness} 
-                                        onChange={(e) => setDimBrightness(parseInt(e.target.value))}
-                                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                                      />
-                                      <p className="text-center text-[10px] text-indigo-600 font-bold">{dimBrightness}%</p>
-                                  </div>
+                                  <input type="range" min="0" max="50" step="5" value={dimBrightness} onChange={(e) => setDimBrightness(parseInt(e.target.value))} className="w-full accent-indigo-600" />
                               )}
                           </div>
                       )}
                   </div>
-
               </div>
           </div>
       )}
