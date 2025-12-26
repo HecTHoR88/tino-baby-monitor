@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 
 export const InstallPrompt: React.FC = () => {
@@ -51,7 +50,7 @@ export const InstallPrompt: React.FC = () => {
       {/* Botón manual que siempre permanece visible en la lista */}
       <button
         onClick={() => setShowModal(true)}
-        className="w-full bg-white p-4 rounded-2xl flex items-center transition-all hover:shadow-lg border border-slate-100 shadow-sm group"
+        className="w-full bg-white py-1.5 px-4 rounded-2xl flex items-center transition-all hover:shadow-lg border border-slate-100 shadow-sm group"
       >
         <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-xl mr-4 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
           ⬇️

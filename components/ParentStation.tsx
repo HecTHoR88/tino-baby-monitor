@@ -182,7 +182,14 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
 
       if (existingIndex >= 0) {
         const oldItem = existingHistory[existingIndex];
-        const newLogs = oldItem.logs ? [now, ...oldItem.logs] : [now];
+        const lastLogTime = (oldItem.logs && oldItem.logs.length > 0) ? oldItem.logs[0] : 0;
+        
+        // CORRECCIÓN DE DUPLICIDAD: 
+        // Si el último registro fue hace menos de 60 segundos, no añadimos uno nuevo, 
+        // solo actualizamos los datos básicos del dispositivo.
+        const isTooRecent = (now - lastLogTime) < 60000;
+        const newLogs = isTooRecent ? (oldItem.logs || [now]) : [now, ...(oldItem.logs || [])];
+
         updatedItem = {
           ...oldItem,
           name: customName || oldItem.name,

@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -22,19 +23,18 @@
     </script>
 
     <meta name="theme-color" content="#bae6fd" />
-    <meta name="description" content="Monitor de bebés confiable y seguro v1.3.8" />
+    <meta name="description" content="Monitor de bebés v1.3.9 - Perfil de diseño consolidado" />
     <link rel="manifest" id="manifest-link">
     
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="TiNO">
-    <meta name="application-name" content="TiNO Baby Monitor">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Inter:wght@400;700;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
       :root {
         --tino-indigo: #4f46e5;
@@ -45,10 +45,9 @@
         height: 100%;
         margin: 0;
         padding: 0;
-        /* Degradado v85 Reforzado: Celeste fuerte arriba, Rosado abajo */
         background: linear-gradient(180deg, #bae6fd 0%, #fce7f3 100%) fixed;
         overflow: hidden;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        font-family: 'Inter', sans-serif;
         -webkit-tap-highlight-color: transparent;
       }
       .text-gradient-tino {
@@ -57,44 +56,37 @@
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        letter-spacing: -0.02em;
       }
       .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       
+      /* Animaciones */
       @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fade-in { animation: fade-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       
-      /* Animación de Levitación v85 */
-      @keyframes float-premium {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-15px); }
-        100% { transform: translateY(0px); }
-      }
-      .animate-float-premium {
-        animation: float-premium 6s ease-in-out infinite;
-      }
+      @keyframes float-premium { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-15px); } }
+      .animate-float-premium { animation: float-premium 6s ease-in-out infinite; }
 
-      .loader {
-        border: 4px solid #f1f5f9;
-        border-top: 4px solid var(--tino-indigo);
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        animation: spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+      @keyframes premium-beat { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.9; } }
+      .animate-premium-beat { animation: premium-beat 2.5s ease-in-out infinite; }
+
+      /* Animación de Parpadeo - 9 segundos, cierre en blanco sólido */
+      @keyframes eye-blink-refined {
+        0%, 88%, 100% { transform: scaleY(0); }
+        92%, 94% { transform: scaleY(1); }
+        98% { transform: scaleY(0); }
       }
-      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      .animate-eye-refined { animation: eye-blink-refined 9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; }
+      
+      .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.4);
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-    <script>
-      setInterval(() => {
-        if (document.title !== "TiNO Baby Monitor") {
-          document.title = "TiNO Baby Monitor";
-        }
-      }, 1000);
-    </script>
   </body>
 </html>
