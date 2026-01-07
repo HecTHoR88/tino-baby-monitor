@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Language } from '../types';
 import { translations } from '../services/translations';
+import { TUT_IMG_1, TUT_IMG_2, TUT_IMG_3 } from '../services/tutorialData';
 
 interface TutorialModalProps {
   lang: Language;
@@ -13,22 +14,25 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ lang, onClose }) =
 
   const steps = [
     {
-      icon: "📱 ↔️ 📱",
+      image: TUT_IMG_1,
+      fallback: "📱 ↔️ 📱",
       title: t.tut_1_title,
       desc: t.tut_1_desc,
-      color: "bg-indigo-50 text-indigo-600 shadow-indigo-100"
+      color: "bg-indigo-50 shadow-indigo-100/50"
     },
     {
-      icon: "📷 ⚡ 📲",
+      image: TUT_IMG_2,
+      fallback: "📷 ⚡ 📲",
       title: t.tut_2_title,
       desc: t.tut_2_desc,
-      color: "bg-purple-50 text-purple-600 shadow-purple-100"
+      color: "bg-purple-50 shadow-purple-100/50"
     },
     {
-      icon: "🧠 🔔 🎵",
+      image: TUT_IMG_3,
+      fallback: "🧠 🔔 🎵",
       title: t.tut_3_title,
       desc: t.tut_3_desc,
-      color: "bg-pink-50 text-pink-600 shadow-pink-100"
+      color: "bg-pink-50 shadow-pink-100/50"
     }
   ];
 
@@ -52,8 +56,16 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ lang, onClose }) =
 
         {/* Content */}
         <div className="px-10 py-6 flex flex-col items-center text-center">
-          <div className={`w-24 h-24 rounded-[2rem] flex items-center justify-center text-4xl mb-8 shadow-2xl transition-all duration-500 transform ${steps[step].color}`}>
-            {steps[step].icon}
+          <div className={`w-32 h-32 rounded-[2.5rem] flex items-center justify-center overflow-hidden mb-8 shadow-2xl transition-all duration-500 transform ${steps[step].color}`}>
+            {steps[step].image ? (
+              <img 
+                src={steps[step].image} 
+                alt={steps[step].title} 
+                className="w-full h-full object-cover animate-fade-in"
+              />
+            ) : (
+              <span className="text-4xl">{steps[step].fallback}</span>
+            )}
           </div>
           <h3 className="text-3xl font-black text-slate-900 mb-4 tracking-tight leading-tight">{steps[step].title}</h3>
           <p className="text-slate-500 leading-relaxed font-medium text-sm mb-4">

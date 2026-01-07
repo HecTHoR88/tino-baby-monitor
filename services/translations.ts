@@ -1,4 +1,3 @@
-
 import { Language } from '../types';
 
 export const translations = {
@@ -26,7 +25,6 @@ export const translations = {
     dev_name_desc: "Nombre de este dispositivo",
     language: "Idioma",
     edit_btn: "CAMBIAR",
-    // Fix: Added missing back_btn translation
     back_btn: "Volver",
     version_label: "TiNO v1.3.9 - CONSOLIDATED",
     online: "EN LÍNEA",
@@ -45,13 +43,18 @@ export const translations = {
     talk_btn: "HABLAR",
     lullaby_btn: "NANAS",
     light_btn: "LUZ",
+    snapshot_btn: "FOTO",
+    snapshot_success: "¡Foto guardada!",
+    sensitivity_title: "SENSIBILIDAD IA",
+    sens_low: "Baja",
+    sens_med: "Normal",
+    sens_high: "Alta",
     alert_cry_title: "¡Alerta de Llanto!",
     alert_move_title: "Movimiento en Cuna",
     alert_body: "Actividad detectada por IA.",
     history_logs: "Historial de Sesiones",
     history_empty: "No hay registros",
     last_connection: "Visto",
-    // Fix: Added missing last_conn translation
     last_conn: "Última conexión:",
     view_logs: "Detalles",
     ai_active: "IA ANALIZANDO",
@@ -150,7 +153,6 @@ export const translations = {
     dev_name_desc: "This device name",
     language: "Language",
     edit_btn: "CHANGE",
-    // Fix: Added missing back_btn translation
     back_btn: "Back",
     version_label: "TiNO v1.3.9 - CONSOLIDATED",
     online: "ONLINE",
@@ -169,13 +171,18 @@ export const translations = {
     talk_btn: "TALK",
     lullaby_btn: "LULLABY",
     light_btn: "LIGHT",
+    snapshot_btn: "PHOTO",
+    snapshot_success: "Photo saved!",
+    sensitivity_title: "AI SENSITIVITY",
+    sens_low: "Low",
+    sens_med: "Normal",
+    sens_high: "High",
     alert_cry_title: "Crying Alert!",
     alert_move_title: "Crib Movement",
     alert_body: "AI detected activity.",
     history_logs: "Session History",
     history_empty: "No logs found",
     last_connection: "Seen",
-    // Fix: Added missing last_conn translation
     last_conn: "Last connection:",
     view_logs: "Details",
     ai_active: "AI ANALYZING",

@@ -24,10 +24,12 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [isTalking, setIsTalking] = useState(false);
   const [nightVision, setNightVision] = useState(false);
   const [lullaby, setLullaby] = useState(false);
+  const [remoteFacingMode, setRemoteFacingMode] = useState<'user' | 'environment'>('environment');
   
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [videoQuality, setVideoQuality] = useState<'high' | 'medium' | 'low'>('medium');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [sensitivity, setSensitivity] = useState<'low' | 'medium' | 'high'>('medium');
   
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState(false);
@@ -46,15 +48,19 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     const saved = secureStorage.getItem<MonitorHistoryItem[]>('monitor_history') || [];
     setHistory(saved);
     
+    // OPTIMIZACIÓN DE LATENCIA: Servidores ICE robustos y pool de candidatos
     const peer = new Peer(undefined as any, { 
         config: { 
             iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun3.l.google.com:19302' },
                 { urls: 'stun:stun4.l.google.com:19302' }
-            ] 
-        } 
+            ],
+            iceCandidatePoolSize: 10
+        },
+        debug: 1
     });
     
     peer.on('error', (err) => {
@@ -106,6 +112,9 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     conn.on('data', (data: any) => { 
         if (data?.type === 'ERROR_AUTH') { alert(data.message); conn.close(); return; }
         if (data?.type === 'INFO_DEVICE_NAME') addToHistory(targetId, data.name, token);
+        if (data?.type === 'INFO_CAMERA_TYPE') {
+            setRemoteFacingMode(data.value);
+        }
         if (data?.type === 'BATTERY_STATUS') {
             setBatteryLevel(data.level);
             setIsCharging(data.charging);
@@ -156,11 +165,12 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       }
   };
 
-  const sendCommand = (type: 'CMD_FLASH' | 'CMD_LULLABY', value: boolean) => { 
+  const sendCommand = (type: 'CMD_FLASH' | 'CMD_LULLABY' | 'CMD_CAMERA' | 'CMD_SENSITIVITY', value: any) => { 
       if (dataConnRef.current?.open) { 
           dataConnRef.current.send({ type, value }); 
           if (type === 'CMD_FLASH') setNightVision(value); 
           if (type === 'CMD_LULLABY') setLullaby(value); 
+          if (type === 'CMD_SENSITIVITY') setSensitivity(value);
       } 
   };
   
@@ -169,6 +179,25 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
           dataConnRef.current.send({ type: 'CMD_QUALITY', value: level });
           setVideoQuality(level);
           setShowQualityMenu(false);
+      }
+  };
+
+  const takeSnapshot = () => {
+      if (!videoRef.current) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+          // Aplicar espejo si es necesario al capturar
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(videoRef.current, 0, 0);
+          const dataUrl = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = `TiNO_Snapshot_${new Date().getTime()}.png`;
+          link.href = dataUrl;
+          link.click();
       }
   };
 
@@ -184,9 +213,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
         const oldItem = existingHistory[existingIndex];
         const lastLogTime = (oldItem.logs && oldItem.logs.length > 0) ? oldItem.logs[0] : 0;
         
-        // CORRECCIÓN DE DUPLICIDAD: 
-        // Si el último registro fue hace menos de 60 segundos, no añadimos uno nuevo, 
-        // solo actualizamos los datos básicos del dispositivo.
         const isTooRecent = (now - lastLogTime) < 60000;
         const newLogs = isTooRecent ? (oldItem.logs || [now]) : [now, ...(oldItem.logs || [])];
 
@@ -324,6 +350,12 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
 
               <div className="absolute top-4 left-24 flex gap-2 z-20">
                   <button onClick={() => setShowQualityMenu(!showQualityMenu)} className="bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full text-white text-[10px] font-bold border border-white/10 uppercase">{videoQuality}</button>
+                  <button onClick={() => {
+                      const next = sensitivity === 'low' ? 'medium' : sensitivity === 'medium' ? 'high' : 'low';
+                      sendCommand('CMD_SENSITIVITY', next);
+                  }} className="bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full text-white text-[10px] font-bold border border-white/10 uppercase">
+                      {t[`sens_${sensitivity.substring(0,3)}` as any] || sensitivity}
+                  </button>
               </div>
 
               {showQualityMenu && (
@@ -338,7 +370,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                   <div className={`absolute top-4 right-4 bg-black/40 backdrop-blur px-3 py-1.5 rounded-full flex items-center gap-2 ${showLowBatteryWarning ? 'bg-rose-500 animate-pulse' : ''}`}>
                       <span className="text-white text-xs font-bold">{Math.round(batteryLevel * 100)}%</span>
                       <div className="w-6 h-3 border border-white/50 rounded-sm p-0.5 relative">
-                          <div className={`h-full rounded-px ${batteryLevel <= 0.2 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{width: `${batteryLevel * 100}%`}} />
+                          <div className={`h-full rounded-px ${batteryLevel <= 0.2 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{width: `${batteryLevel * 100}%` }} />
                           {isCharging && <span className="absolute -left-3 -top-1 text-[8px]">⚡</span>}
                       </div>
                   </div>
@@ -363,10 +395,20 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                  <button onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} className="text-rose-500 text-[10px] font-black tracking-widest bg-rose-50 px-4 py-2 rounded-full uppercase">CERRAR</button>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                  <button onMouseDown={() => toggleTalk(true)} onMouseUp={() => toggleTalk(false)} onTouchStart={() => toggleTalk(true)} onTouchEnd={() => toggleTalk(false)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${isTalking ? 'bg-indigo-500 text-white scale-95 shadow-inner' : 'bg-white text-indigo-500 shadow-sm'}`}><span className="text-3xl">🎙️</span><span className="text-[10px] font-bold uppercase">{t.talk_btn}</span></button>
-                  <button onClick={() => sendCommand('CMD_LULLABY', !lullaby)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${lullaby ? 'bg-purple-500 text-white shadow-inner' : 'bg-white text-purple-500 shadow-sm'}`}><span className="text-3xl">🎵</span><span className="text-[10px] font-bold uppercase">{t.lullaby_btn}</span></button>
-                  <button onClick={() => sendCommand('CMD_FLASH', !nightVision)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${nightVision ? 'bg-amber-500 text-white shadow-inner' : 'bg-white text-amber-500 shadow-sm'}`}><span className="text-3xl">💡</span><span className="text-[10px] font-bold uppercase">{t.light_btn}</span></button>
+              <div className="grid grid-cols-4 gap-3">
+                  <button onMouseDown={() => toggleTalk(true)} onMouseUp={() => toggleTalk(false)} onTouchStart={() => toggleTalk(true)} onTouchEnd={() => toggleTalk(false)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${isTalking ? 'bg-indigo-500 text-white scale-95 shadow-inner' : 'bg-white text-indigo-500 shadow-sm'}`}><span className="text-2xl">🎙️</span><span className="text-[9px] font-bold uppercase">{t.talk_btn}</span></button>
+                  <button onClick={() => sendCommand('CMD_LULLABY', !lullaby)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${lullaby ? 'bg-purple-500 text-white shadow-inner' : 'bg-white text-purple-500 shadow-sm'}`}><span className="text-2xl">🎵</span><span className="text-[9px] font-bold uppercase">{t.lullaby_btn}</span></button>
+                  <button onClick={() => sendCommand('CMD_FLASH', !nightVision)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${nightVision ? 'bg-amber-500 text-white shadow-inner' : 'bg-white text-amber-500 shadow-sm'}`}><span className="text-2xl">💡</span><span className="text-[9px] font-bold uppercase">{t.light_btn}</span></button>
+                  <button onClick={takeSnapshot} className="aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all bg-white text-emerald-500 shadow-sm active:scale-95">
+                    <span className="text-2xl">📸</span>
+                    <span className="text-[9px] font-bold uppercase">{t.snapshot_btn}</span>
+                  </button>
+              </div>
+              <div className="mt-4 flex justify-center">
+                  <button onClick={() => sendCommand('CMD_CAMERA', remoteFacingMode === 'user' ? 'environment' : 'user')} className="w-full bg-white py-3 rounded-2xl shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all text-sky-500">
+                    <span className="text-xl">🔄</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{t.cam_select}</span>
+                  </button>
               </div>
           </div>
       </div>

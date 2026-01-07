@@ -18,6 +18,7 @@ export type RemoteCommand =
   | { type: 'CMD_LULLABY'; value: boolean }
   | { type: 'CMD_QUALITY'; value: 'high' | 'medium' | 'low' }
   | { type: 'CMD_NOTIFICATION'; title: string; body: string }
+  | { type: 'CMD_CAMERA'; value: 'user' | 'environment' }
   | { type: 'INFO_CAMERA_TYPE'; value: 'user' | 'environment' };
 
 export interface MonitorHistoryItem {
