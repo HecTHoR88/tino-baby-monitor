@@ -1,16 +1,16 @@
 import { BRAND_LOGO_DATA } from './logoData';
 
 /**
- * TiNO Official Brand Logic - v1.3.6
+ * TiNO Official Brand Logic - v1.4.0
  * Este archivo gestiona el favicon y el manifest. 
- * Ya no contiene el código Base64 directamente para evitar errores de edición.
+ * Ahora soporta tanto rutas de archivos locales como strings Base64.
  */
 
 export const BRAND_LOGO = BRAND_LOGO_DATA;
 
 export const applyGlobalBranding = () => {
-  // Validación de seguridad
-  if (!BRAND_LOGO || BRAND_LOGO.length < 100) return;
+  // Validación de seguridad: Permitimos rutas de archivos (mínimo 3 caracteres) o Base64.
+  if (!BRAND_LOGO || BRAND_LOGO.length < 3) return;
 
   // A. Actualizar Favicon
   let favicon: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
@@ -32,7 +32,7 @@ export const applyGlobalBranding = () => {
 
   // C. Generar Manifiesto Dinámico
   const manifest = {
-    "id": "tino-baby-monitor-v136",
+    "id": "tino-baby-monitor-v140",
     "short_name": "TiNO",
     "name": "TiNO Baby Monitor",
     "start_url": "./index.html",

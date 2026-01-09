@@ -1,17 +1,18 @@
 {
-  "id": "tino-baby-monitor-v136",
+  "id": "tino-baby-monitor-v140",
   "short_name": "TiNO",
   "name": "TiNO Baby Monitor",
   "start_url": "../index.html",
   "display": "standalone",
-  "background_color": "#f8fafc",
+  "background_color": "#bae6fd",
   "theme_color": "#4f46e5",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-      "sizes": "192x192 512x512",
-      "type": "image/png"
+      "src": "assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
