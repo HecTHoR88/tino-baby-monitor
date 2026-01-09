@@ -1,7 +1,7 @@
 /**
  * TiNO v1.4.0 - Asset Reference
  * Referencia a archivo físico para el logo.
- * Se utiliza una ruta directa para asegurar la carga en la mayoría de servidores web.
+ * Se utiliza una URL externa de GitHub para asegurar la carga correcta.
  */
 
-export const BRAND_LOGO_DATA: string = "images/logo.png";
+export const BRAND_LOGO_DATA: string = "https://github.com/HecTHoR88/tino-baby-monitor/blob/main/logo.png?raw=true";
