@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -23,12 +22,12 @@
     </script>
 
     <meta name="theme-color" content="#bae6fd" />
-    <meta name="description" content="Monitor de bebés v1.3.9 - Perfil de diseño consolidado" />
+    <meta name="description" content="Monitor de bebés v1.4.0 - Native Optimization" />
     <link rel="manifest" id="manifest-link">
     
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TiNO">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -50,6 +49,12 @@
         font-family: 'Inter', sans-serif;
         -webkit-tap-highlight-color: transparent;
       }
+      
+      /* Soporte para áreas seguras (iOS/Android Notch) */
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .mt-safe { margin-top: env(safe-area-inset-top, 0px); }
+
       .text-gradient-tino {
         font-family: 'Fredoka', sans-serif;
         background: linear-gradient(135deg, var(--tino-indigo) 0%, var(--tino-pink) 100%);
@@ -59,7 +64,6 @@
       }
       .no-scrollbar::-webkit-scrollbar { display: none; }
       
-      /* Animaciones */
       @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fade-in { animation: fade-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       
@@ -69,7 +73,6 @@
       @keyframes premium-beat { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.9; } }
       .animate-premium-beat { animation: premium-beat 2.5s ease-in-out infinite; }
 
-      /* Animación de Parpadeo - 9 segundos, cierre en blanco sólido */
       @keyframes eye-blink-refined {
         0%, 88%, 100% { transform: scaleY(0); }
         92%, 94% { transform: scaleY(1); }

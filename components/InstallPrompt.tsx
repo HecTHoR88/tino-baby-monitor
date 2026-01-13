@@ -5,7 +5,6 @@ export const InstallPrompt: React.FC = () => {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  // Nuevo estado para controlar si ya mostramos la invitación automática
   const [hasAutoShown, setHasAutoShown] = useState(false);
 
   useEffect(() => {
@@ -18,8 +17,6 @@ export const InstallPrompt: React.FC = () => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Si detectamos que se puede instalar y no estamos en modo standalone,
-      // mostramos el modal automáticamente una vez por sesión.
       if (!hasAutoShown) {
         setShowModal(true);
         setHasAutoShown(true);
@@ -38,16 +35,16 @@ export const InstallPrompt: React.FC = () => {
       }
       setShowModal(false);
     } else {
-      // Si no hay prompt automático (ej. iOS o ya instalado pero no detectado), mostramos instrucciones manuales
       setShowModal(true);
     }
   };
 
-  if (isStandalone) return null;
+  // REGLA: Si estamos en Capacitor (App Nativa), no mostramos el botón de instalación
+  const isCapacitor = !!(window as any).Capacitor;
+  if (isStandalone || isCapacitor) return null;
 
   return (
     <>
-      {/* Botón manual que siempre permanece visible en la lista */}
       <button
         onClick={() => setShowModal(true)}
         className="w-full bg-white py-1.5 px-4 rounded-2xl flex items-center transition-all hover:shadow-lg border border-slate-100 shadow-sm group"
@@ -61,7 +58,6 @@ export const InstallPrompt: React.FC = () => {
         </div>
       </button>
 
-      {/* Modal de Instalación (Automático o Manual) */}
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 sm:p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowModal(false)}>
           <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full relative shadow-2xl animate-float" onClick={e => e.stopPropagation()}>
@@ -78,7 +74,6 @@ export const InstallPrompt: React.FC = () => {
             </div>
 
             {deferredPrompt ? (
-              // Botón directo si el navegador lo soporta (Android/Desktop Chrome)
               <button 
                 onClick={handleInstallClick}
                 className="w-full bg-indigo-600 py-4 rounded-xl font-bold text-white shadow-xl shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all text-lg"
@@ -86,7 +81,6 @@ export const InstallPrompt: React.FC = () => {
                 Instalar Ahora
               </button>
             ) : (
-              // Instrucciones manuales (iOS / Otros)
               <div className="space-y-4">
                 {isIOS ? (
                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-3 text-slate-600 text-sm">

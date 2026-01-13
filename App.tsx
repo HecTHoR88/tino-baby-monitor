@@ -87,21 +87,21 @@ const App: React.FC = () => {
   };
 
   const handleDownloadBackup = () => {
-    const backupContent = `TiNO Baby Monitor - v1.3.9\nID: ${getDeviceId()}\nNombre: ${currentDeviceName}\nFecha: ${new Date().toLocaleString()}`;
+    const backupContent = `TiNO Baby Monitor - v1.4.0\nID: ${getDeviceId()}\nNombre: ${currentDeviceName}\nFecha: ${new Date().toLocaleString()}`;
     const blob = new Blob([backupContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `TiNO_v139_Compact_Edition.txt`;
+    link.download = `TiNO_v140_Native_Config.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
   const renderHome = () => (
-    <div className="flex flex-col items-center justify-center min-h-full p-6 animate-fade-in relative z-10 pb-4">
-      <button onClick={() => setShowTutorial(true)} className="absolute top-4 right-6 w-10 h-10 rounded-full bg-white/50 backdrop-blur-md flex items-center justify-center text-slate-600 font-bold border border-white z-20">?</button>
+    <div className="flex flex-col items-center justify-center min-h-full p-6 animate-fade-in relative z-10 pb-4 pt-safe">
+      <button onClick={() => setShowTutorial(true)} className="absolute top-4 right-6 w-10 h-10 rounded-full bg-white/50 backdrop-blur-md flex items-center justify-center text-slate-600 font-bold border border-white z-20 mt-safe">?</button>
       
-      <div className="text-center w-full max-w-xs">
+      <div className="text-center w-full max-w-xs mt-4">
         <div className="inline-flex items-center justify-center w-32 h-32 rounded-[3rem] bg-white shadow-xl mb-4 animate-float-premium relative z-10 border-4 border-white overflow-hidden">
           <img src={BRAND_LOGO} alt="TiNO" className="w-full h-full object-cover" />
         </div>
@@ -183,7 +183,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="mt-6 mb-4 text-center flex flex-col items-center gap-1">
-        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">TiNO v1.3.9 - PREMIUM EDITION</p>
+        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">TiNO v1.4.0 - NATIVE EDITION</p>
         {localBattery && (
           <div className="flex items-center gap-1.5 opacity-40 group hover:opacity-100 transition-opacity">
             <span className="text-[10px] font-bold text-slate-500">{Math.round(localBattery.level * 100)}%</span>
@@ -205,8 +205,8 @@ const App: React.FC = () => {
   const renderEquipos = () => {
     if (selectedLogDevice) {
       return (
-        <div className="p-6 pt-12 max-w-md mx-auto animate-fade-in">
-          <button onClick={() => setSelectedLogDevice(null)} className="mb-6 flex items-center gap-2 text-indigo-500 font-bold text-sm bg-white px-4 py-2 rounded-xl shadow-sm w-max">← {t.back_btn}</button>
+        <div className="p-6 pt-12 max-w-md mx-auto animate-fade-in pt-safe">
+          <button onClick={() => setSelectedLogDevice(null)} className="mb-6 mt-4 flex items-center gap-2 text-indigo-500 font-bold text-sm bg-white px-4 py-2 rounded-xl shadow-sm w-max">← {t.back_btn}</button>
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-6">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-14 h-14 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-500 text-2xl">
@@ -240,8 +240,8 @@ const App: React.FC = () => {
     }
 
     return (
-      <div className="p-6 pt-12 max-w-md mx-auto animate-fade-in">
-        <h2 className="text-lg font-black text-slate-800 mb-2">{t.tab_devices}</h2>
+      <div className="p-6 pt-12 max-w-md mx-auto animate-fade-in pt-safe">
+        <h2 className="text-lg font-black text-slate-800 mb-2 mt-4">{t.tab_devices}</h2>
         <p className="text-slate-400 text-[11px] font-bold mb-10">{t.dev_subtitle}</p>
 
         <div className="mb-10">
@@ -317,8 +317,8 @@ const App: React.FC = () => {
           {activeTab === 'home' && renderHome()}
           {activeTab === 'devices' && renderEquipos()}
           {activeTab === 'settings' && (
-            <div className="p-8 animate-fade-in pt-12">
-               <h2 className="text-lg font-black text-slate-900 mb-2">{t.tab_config}</h2>
+            <div className="p-8 animate-fade-in pt-12 pt-safe">
+               <h2 className="text-lg font-black text-slate-900 mb-2 mt-4">{t.tab_config}</h2>
                <div className="space-y-6 mt-10">
                  <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100 w-full">
                     <div className="flex items-center justify-between gap-4">
@@ -353,7 +353,7 @@ const App: React.FC = () => {
         </div>
         
         {/* BARRA DE NAVEGACIÓN INFERIOR */}
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/90 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60]">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/90 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60] pb-safe">
           {/* BOTÓN INICIO (LOGO TiNO) */}
           <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
             <div className={`w-7 h-7 rounded-full overflow-hidden border-2 mb-1 shadow-sm transition-colors ${activeTab === 'home' ? 'border-indigo-400' : 'border-slate-200'}`}>
