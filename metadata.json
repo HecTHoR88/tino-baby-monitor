@@ -1,6 +1,6 @@
 {
   "name": "TiNO Baby Monitor",
-  "description": "Sistema de monitoreo inteligente para bebés.",
+  "description": "Sistema de monitoreo inteligente para bebés v1.4.0 Native Edition.",
   "requestFramePermissions": [
     "camera",
     "microphone"

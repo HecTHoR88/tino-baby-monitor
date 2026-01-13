@@ -100,7 +100,7 @@ const App: React.FC = () => {
   };
 
   const handleDownloadBackup = () => {
-    const backupContent = `TiNO Baby Monitor - v1.4.0\nID: ${getDeviceId()}\nNombre: ${currentDeviceName}\nFecha: ${new Date().toLocaleString()}`;
+    const backupContent = `TiNO Baby Monitor - v1.4.0 Native Edition\nID: ${getDeviceId()}\nNombre: ${currentDeviceName}\nFecha: ${new Date().toLocaleString()}`;
     const blob = new Blob([backupContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -196,7 +196,7 @@ const App: React.FC = () => {
       </div>
 
       <div className="mt-6 mb-4 text-center flex flex-col items-center gap-1">
-        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">TiNO v1.4.0 - NATIVE EDITION</p>
+        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{t.version_label}</p>
         {localBattery && (
           <div className="flex items-center gap-1.5 opacity-40 group hover:opacity-100 transition-opacity">
             <span className="text-[10px] font-bold text-slate-500">{Math.round(localBattery.level * 100)}%</span>
@@ -326,7 +326,7 @@ const App: React.FC = () => {
     return (
       <div className="flex flex-col h-full relative overflow-hidden" style={V85_GRADIENT}>
         {showTutorial && <TutorialModal lang={language} onClose={() => setShowTutorial(false)} />}
-        <div className="flex-1 overflow-y-auto no-scrollbar pb-20">
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-24">
           {activeTab === 'home' && renderHome()}
           {activeTab === 'devices' && renderEquipos()}
           {activeTab === 'settings' && (
@@ -365,35 +365,35 @@ const App: React.FC = () => {
           )}
         </div>
         
-        {/* BARRA DE NAVEGACIÓN INFERIOR MEJORADA */}
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm min-h-[5rem] h-auto py-2 bg-white/90 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60] pb-safe mb-safe">
+        {/* BARRA DE NAVEGACIÓN INFERIOR MEJORADA - REFINAMIENTO v1.4.0 */}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/95 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-stretch z-[60] pb-safe">
           {/* BOTÓN INICIO (LOGO TiNO) */}
-          <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center flex-1 transition-all py-1 ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
+          <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
             <div className={`w-7 h-7 rounded-full overflow-hidden border-2 mb-1 shadow-sm transition-colors ${activeTab === 'home' ? 'border-indigo-400' : 'border-slate-200'}`}>
                <img src={BRAND_LOGO} alt="Inicio" className="w-full h-full object-cover" />
             </div>
             <span className={`text-[8px] font-black uppercase ${activeTab === 'home' ? 'text-indigo-600' : 'text-slate-400'}`}>{t.tab_home}</span>
           </button>
           
-          {/* BOTÓN EQUIPOS (DISPOSITIVOS VINCULADOS) */}
-          <button onClick={() => { setActiveTab('devices'); setSelectedLogDevice(null); }} className={`flex flex-col items-center flex-1 transition-all py-1 ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
+          {/* BOTÓN EQUIPOS */}
+          <button onClick={() => { setActiveTab('devices'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
             <svg className="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="8" y="2" width="10" height="16" rx="2" />
               <rect x="4" y="6" width="10" height="16" rx="2" fill="white" fillOpacity="0.7" />
               <circle cx="9" cy="19" r="0.5" fill="currentColor" stroke="none" />
             </svg>
-            <span className="text-[8px] font-black uppercase">{t.tab_devices}</span>
+            <span className="text-[8px] font-black uppercase tracking-tighter">{t.tab_devices}</span>
           </button>
           
-          {/* BOTÓN AJUSTES (NUEVO ICONO: SLIDERS) */}
-          <button onClick={() => { setActiveTab('settings'); setSelectedLogDevice(null); }} className={`flex flex-col items-center flex-1 transition-all py-1 ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
+          {/* BOTÓN AJUSTES */}
+          <button onClick={() => { setActiveTab('settings'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
             <svg className="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
               <circle cx="4" cy="12" r="1.5" fill="currentColor" />
               <circle cx="12" cy="10" r="1.5" fill="currentColor" />
               <circle cx="20" cy="14" r="1.5" fill="currentColor" />
             </svg>
-            <span className="text-[8px] font-black uppercase">{t.tab_config}</span>
+            <span className="text-[8px] font-black uppercase tracking-tighter">{t.tab_config}</span>
           </button>
         </div>
       </div>
