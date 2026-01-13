@@ -365,8 +365,8 @@ const App: React.FC = () => {
           )}
         </div>
         
-        {/* BARRA DE NAVEGACIÓN INFERIOR MEJORADA - REFINAMIENTO v1.4.0 */}
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/95 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-stretch z-[60] pb-safe">
+        {/* BARRA DE NAVEGACIÓN INFERIOR - RESTAURADA Y CENTRADA */}
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/95 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60]">
           {/* BOTÓN INICIO (LOGO TiNO) */}
           <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
             <div className={`w-7 h-7 rounded-full overflow-hidden border-2 mb-1 shadow-sm transition-colors ${activeTab === 'home' ? 'border-indigo-400' : 'border-slate-200'}`}>
