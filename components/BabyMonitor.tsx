@@ -485,7 +485,7 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           </div>
       )}
 
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 flex justify-between items-start">
+      <div className="absolute top-0 left-0 right-0 z-20 p-4 pt-6 flex justify-between items-start mt-safe">
         <div className="flex flex-col gap-2">
             <div className="bg-white/90 backdrop-blur-md shadow-sm px-4 py-2 rounded-full flex items-center gap-2 w-max">
                 <div className={`w-2.5 h-2.5 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
