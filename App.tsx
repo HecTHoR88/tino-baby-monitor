@@ -49,18 +49,17 @@ const App: React.FC = () => {
     if (savedLang) setLanguage(savedLang);
     refreshHistory();
 
-    // Habilitar Modo Full Screen si estamos en Capacitor
-    const setupNativeEnvironment = async () => {
-      if ((window as any).Capacitor) {
-        try {
-          const { StatusBar } = await import('@capacitor/status-bar');
-          await StatusBar.hide();
-        } catch (e) {
-          console.debug("StatusBar hide failed or not installed:", e);
-        }
+    // Activar Pantalla Completa (Modo Inmersivo Nativo)
+    const enableFullscreen = () => {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(e => console.debug("Fullscreen blocked by browser policy:", e));
       }
     };
-    setupNativeEnvironment();
+    
+    // Intentar activar al cargar, pero también añadir un listener para la primera interacción
+    enableFullscreen();
+    window.addEventListener('click', enableFullscreen, { once: true });
+    window.addEventListener('touchstart', enableFullscreen, { once: true });
 
     if ('getBattery' in navigator) {
       (navigator as any).getBattery().then((battery: any) => {
@@ -76,7 +75,11 @@ const App: React.FC = () => {
       setTimeout(() => { setMsgIndex((prev) => (prev + 1) % 30); setFade(true); }, 2000); 
     }, 20000); 
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('click', enableFullscreen);
+      window.removeEventListener('touchstart', enableFullscreen);
+    };
   }, [activeTab, mode]);
 
   const changeLanguage = (lang: Language) => {
@@ -365,10 +368,10 @@ const App: React.FC = () => {
           )}
         </div>
         
-        {/* BARRA DE NAVEGACIÓN INFERIOR - RESTAURADA Y CENTRADA */}
+        {/* BARRA DE NAVEGACIÓN INFERIOR - RESTAURADA Y CENTRADA PERFECTAMENTE */}
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/95 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60]">
           {/* BOTÓN INICIO (LOGO TiNO) */}
-          <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
+          <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
             <div className={`w-7 h-7 rounded-full overflow-hidden border-2 mb-1 shadow-sm transition-colors ${activeTab === 'home' ? 'border-indigo-400' : 'border-slate-200'}`}>
                <img src={BRAND_LOGO} alt="Inicio" className="w-full h-full object-cover" />
             </div>
@@ -376,7 +379,7 @@ const App: React.FC = () => {
           </button>
           
           {/* BOTÓN EQUIPOS */}
-          <button onClick={() => { setActiveTab('devices'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
+          <button onClick={() => { setActiveTab('devices'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
             <svg className="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <rect x="8" y="2" width="10" height="16" rx="2" />
               <rect x="4" y="6" width="10" height="16" rx="2" fill="white" fillOpacity="0.7" />
@@ -386,7 +389,7 @@ const App: React.FC = () => {
           </button>
           
           {/* BOTÓN AJUSTES */}
-          <button onClick={() => { setActiveTab('settings'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
+          <button onClick={() => { setActiveTab('settings'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 h-full transition-all ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
             <svg className="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
               <circle cx="4" cy="12" r="1.5" fill="currentColor" />
@@ -404,3 +407,5 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+//seguimos x2
