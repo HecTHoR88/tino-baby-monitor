@@ -408,4 +408,4 @@ const App: React.FC = () => {
 
 export default App;
 
-//seguimos
+//seguimos x2

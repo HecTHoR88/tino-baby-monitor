@@ -484,8 +484,8 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           </div>
       )}
 
-      {/* ENCABEZADO REFINADO - pt-10 para asegurar visibilidad en Notch nativo */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 pt-10 flex justify-between items-start mt-safe">
+      {/* ENCABEZADO OPTIMIZADO - pt-4 para subir botones en modo nativo */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-4 pt-4 flex justify-between items-start mt-safe">
         <div className="flex flex-col gap-2">
             <div className="bg-white/90 backdrop-blur-md shadow-sm px-4 py-2 rounded-full flex items-center gap-2 w-max">
                 <div className={`w-2.5 h-2.5 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
@@ -515,15 +515,16 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
         />
         
-        <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-30">
-            <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-sky-600 text-xs font-bold animate-pulse shadow-sm flex items-center gap-2">🧠 {t.ai_active}</div>
-            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-indigo-500 text-xs font-bold animate-pulse shadow-sm flex items-center gap-2">🎵 {t.lullaby_active}</div>}
+        {/* ETIQUETAS DE ESTADO COMPACTAS - text-[10px] y padding reducido */}
+        <div className="absolute bottom-6 left-6 flex flex-col gap-1.5 z-30">
+            <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-sky-600 text-[10px] font-bold animate-pulse shadow-sm flex items-center gap-1.5 w-max">🧠 {t.ai_active}</div>
+            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-indigo-500 text-[10px] font-bold animate-pulse shadow-sm flex items-center gap-1.5 w-max">🎵 {t.lullaby_active}</div>}
             {isNightVision && (
-                <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-amber-500 text-xs font-bold shadow-sm flex items-center gap-2">
+                <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-amber-500 text-[10px] font-bold shadow-sm flex items-center gap-1.5 w-max">
                     ⚡ {t.flash_on}
                 </div>
             )}
-            <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-slate-600 text-xs font-bold shadow-sm flex items-center gap-2 uppercase">
+            <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-slate-600 text-[10px] font-bold shadow-sm flex items-center gap-1.5 uppercase w-max">
                 <span>📹</span> {currentQuality.toUpperCase()}
             </div>
         </div>
