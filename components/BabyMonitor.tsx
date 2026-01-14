@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Peer, MediaConnection, DataConnection } from 'peerjs';
 import QRCode from 'qrcode';
@@ -135,6 +136,7 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
       clearInterval(heartbeat);
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
       if (peerRef.current) peerRef.current.destroy();
+      // Corrected: Remove redundant getTracks() call on the MediaStreamTrack[] array.
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       if (lightTrackRef.current) {
           try {
@@ -484,24 +486,24 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           </div>
       )}
 
-      {/* ENCABEZADO OPTIMIZADO - pt-4 para subir botones en modo nativo */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 pt-4 flex justify-between items-start mt-safe">
-        <div className="flex flex-col gap-2">
-            <div className="bg-white/90 backdrop-blur-md shadow-sm px-4 py-2 rounded-full flex items-center gap-2 w-max">
-                <div className={`w-2.5 h-2.5 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
-                <span className="text-slate-600 text-xs font-bold tracking-wide uppercase">{serverStatus === 'connected' ? t.online : t.connecting}</span>
+      {/* ENCABEZADO OPTIMIZADO: pt-2 para subir botones al máximo en Fullscreen */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-3 pt-2 flex justify-between items-start">
+        <div className="flex flex-col gap-1.5">
+            <div className="bg-white/90 backdrop-blur-md shadow-sm px-3 py-1.5 rounded-full flex items-center gap-2 w-max">
+                <div className={`w-2 h-2 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
+                <span className="text-slate-600 text-[10px] font-bold tracking-wide uppercase">{serverStatus === 'connected' ? t.online : t.connecting}</span>
             </div>
             {!showQrPanel && (
-                <button onClick={() => setShowQrPanel(true)} className="bg-white/90 shadow-sm px-4 py-2 rounded-full text-slate-500 text-xs font-bold w-max flex items-center gap-1">
+                <button onClick={() => setShowQrPanel(true)} className="bg-white/90 shadow-sm px-3 py-1.5 rounded-full text-slate-500 text-[10px] font-bold w-max flex items-center gap-1">
                     <span>📱</span> {connectedPeers.length}/3
                 </button>
             )}
         </div>
-        <div className="flex gap-3">
-            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-700 active:scale-95 transition-all">
-                <span className="text-xl">⚙️</span>
+        <div className="flex gap-2">
+            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-sm w-9 h-9 rounded-full flex items-center justify-center text-slate-700 active:scale-95 transition-all">
+                <span className="text-lg">⚙️</span>
             </button>
-            <button onClick={onBack} className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-all">✕</button>
+            <button onClick={onBack} className="bg-white/90 shadow-sm w-9 h-9 mr-2 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-all">✕</button>
         </div>
       </div>
 
@@ -515,16 +517,16 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
         />
         
-        {/* ETIQUETAS DE ESTADO COMPACTAS - text-[10px] y padding reducido */}
-        <div className="absolute bottom-6 left-6 flex flex-col gap-1.5 z-30">
-            <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-sky-600 text-[10px] font-bold animate-pulse shadow-sm flex items-center gap-1.5 w-max">🧠 {t.ai_active}</div>
-            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-indigo-500 text-[10px] font-bold animate-pulse shadow-sm flex items-center gap-1.5 w-max">🎵 {t.lullaby_active}</div>}
+        {/* ETIQUETAS DE ESTADO COMPACTAS: text-[9px] y padding reducido */}
+        <div className="absolute bottom-4 left-4 flex flex-col gap-1 z-30">
+            <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-sky-600 text-[9px] font-bold animate-pulse shadow-sm flex items-center gap-1 w-max"><span>🧠</span> {t.ai_active}</div>
+            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-indigo-500 text-[9px] font-bold animate-pulse shadow-sm flex items-center gap-1 w-max"><span>🎵</span> {t.lullaby_active}</div>}
             {isNightVision && (
-                <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-amber-500 text-[10px] font-bold shadow-sm flex items-center gap-1.5 w-max">
-                    ⚡ {t.flash_on}
+                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-amber-500 text-[9px] font-bold shadow-sm flex items-center gap-1 w-max">
+                    <span>⚡</span> {t.flash_on}
                 </div>
             )}
-            <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-slate-600 text-[10px] font-bold shadow-sm flex items-center gap-1.5 uppercase w-max">
+            <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-slate-600 text-[9px] font-bold shadow-sm flex items-center gap-1 uppercase w-max">
                 <span>📹</span> {currentQuality.toUpperCase()}
             </div>
         </div>
