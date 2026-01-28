@@ -110,95 +110,90 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const renderHome = () => (
-    <div className="flex flex-col items-center justify-center min-h-full p-6 animate-fade-in relative z-10 pb-4 pt-safe">
-      <button onClick={() => setShowTutorial(true)} className="absolute top-4 right-6 w-10 h-10 rounded-full bg-white/50 backdrop-blur-md flex items-center justify-center text-slate-600 font-bold border border-white z-20 mt-safe">?</button>
+ const renderHome = () => (
+    <div className="flex flex-col items-center min-h-full p-6 animate-fade-in relative z-10 pb-4 pt-safe">
       
-      <div className="text-center w-full max-w-xs mt-4">
-        <div className="inline-flex items-center justify-center w-32 h-32 rounded-[3rem] bg-white shadow-xl mb-4 animate-float-premium relative z-10 border-4 border-white overflow-hidden">
-          <img src={BRAND_LOGO} alt="TiNO" className="w-full h-full object-cover" />
+      {/* CONTENIDO PRINCIPAL (LOGO Y BOTONES) */}
+      <div className="flex-1 flex flex-col items-center justify-center w-full">
+        <div className="text-center w-full max-w-xs mt-4">
+          <div className="inline-flex items-center justify-center w-32 h-32 rounded-[3rem] bg-white shadow-xl mb-4 animate-float-premium relative z-10 border-4 border-white overflow-hidden">
+            <img src={BRAND_LOGO} alt="TiNO" className="w-full h-full object-cover" />
+          </div>
+          <h1 className="text-6xl font-black tracking-tighter text-gradient-tino">TiNO</h1>
+          <p className="text-slate-400 font-bold text-[10px] tracking-[0.4em] uppercase mb-4">{t.subtitle}</p>
+          
+          <div className="h-12 flex items-start justify-center mb-4">
+            <p className={`text-slate-500 font-nunito italic text-sm md:text-base leading-snug transition-opacity duration-[2000ms] ease-in-out px-4 ${fade ? 'opacity-100' : 'opacity-0'}`}>
+              {currentMessages[msgIndex]}
+            </p>
+          </div>
         </div>
-        <h1 className="text-6xl font-black tracking-tighter text-gradient-tino">TiNO</h1>
-        <p className="text-slate-400 font-bold text-[10px] tracking-[0.4em] uppercase mb-4">{t.subtitle}</p>
-        
-        <div className="h-12 flex items-start justify-center mb-4">
-          <p className={`text-slate-500 font-nunito italic text-sm md:text-base leading-snug transition-opacity duration-[2000ms] ease-in-out px-4 ${fade ? 'opacity-100' : 'opacity-0'}`}>
-            {currentMessages[msgIndex]}
-          </p>
+
+        <div className="w-full max-w-sm grid grid-cols-2 gap-6 mb-6 px-2">
+          {/* MODO BEBÉ */}
+          <button 
+            onClick={() => setMode(AppMode.MONITOR)} 
+            className="group relative bg-gradient-to-br from-white to-sky-50 p-5 rounded-[3rem] shadow-[0_20px_40px_rgba(186,230,253,0.3)] flex flex-col items-center justify-center gap-4 aspect-square transition-all duration-300 hover:scale-[1.03] active:scale-95 border border-sky-100 overflow-hidden"
+          >
+            <div className="w-20 h-20 flex items-center justify-center relative z-10">
+              <svg className="absolute inset-0 w-full h-full text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="6" y="2" width="12" height="20" rx="6" />
+                <circle cx="12" cy="8.5" r="5" fill="white" />
+              </svg>
+              <div className="absolute top-[35.4%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[34px] h-[34px] rounded-full overflow-hidden flex items-center justify-center z-20">
+                <div className="absolute w-[24px] h-[24px] rounded-full blur-[0.9px] opacity-90" style={{background: 'radial-gradient(circle at 35% 35%, rgba(103, 232, 249, 0.8) 0%, rgba(37, 99, 235, 0.85) 60%, rgba(15, 23, 42, 1) 100%)'}} />
+                <div className="absolute w-1.5 h-1.5 bg-slate-950 rounded-full blur-[0.3px]"></div>
+                <div className="absolute top-0 left-0 w-full h-1/2 bg-white origin-top animate-eye-refined"></div>
+                <div className="absolute bottom-0 left-0 w-full h-1/2 bg-white origin-bottom animate-eye-refined"></div>
+              </div>
+              <div className="absolute -top-1 -right-1 bg-white p-1.5 rounded-full shadow-lg border border-sky-50 animate-premium-beat z-30">
+                <svg className="w-4 h-4 text-rose-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+              </div>
+            </div>
+            <div className="text-center relative z-10">
+              <h3 className="font-bold text-slate-700 text-xl leading-none">BaBy</h3>
+              <p className="text-[8px] text-sky-400 uppercase font-black tracking-[0.2em] mt-1.5">{t.mode_camera}</p>
+            </div>
+          </button>
+
+          {/* MODO PADRES */}
+          <button 
+            onClick={() => setMode(AppMode.PARENT)} 
+            className="group relative bg-gradient-to-br from-white to-rose-50 p-5 rounded-[3rem] shadow-[0_20px_40px_rgba(252,231,243,0.3)] flex flex-col items-center justify-center gap-4 aspect-square transition-all duration-300 hover:scale-[1.03] active:scale-95 border border-rose-100 overflow-hidden"
+          >
+            <div className="w-20 h-20 flex items-center justify-center relative z-10">
+              <svg className="w-12 h-12 text-rose-500 filter drop-shadow-sm relative z-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="5" y="2" width="14" height="20" rx="3" fill="currentColor" fillOpacity="0.05"/>
+                <path d="M12 18h.01" strokeWidth="3" />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-12 h-12 border-2 border-rose-200 rounded-full animate-[ping_2.5s_linear_infinite] opacity-40"></div>
+                <div className="w-16 h-16 border-2 border-rose-100 rounded-full animate-[ping_3s_linear_infinite] opacity-20 absolute"></div>
+              </div>
+              <div className="absolute -bottom-1 -right-1 bg-white p-1.5 rounded-full shadow-lg border border-rose-50">
+                <svg className="w-4 h-4 text-rose-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                </svg>
+              </div>
+            </div>
+            <div className="text-center relative z-10">
+              <h3 className="font-bold text-slate-700 text-xl leading-none">{t.parent_title}</h3>
+              <p className="text-[8px] text-rose-400 uppercase font-black tracking-[0.2em] mt-1.5">{t.mode_monitor}</p>
+            </div>
+          </button>
+        </div>
+
+        <div className="w-full max-w-sm">
+          <InstallPrompt />
         </div>
       </div>
 
-      <div className="w-full max-w-sm grid grid-cols-2 gap-6 mb-6 px-2">
-        {/* MODO BEBÉ */}
-        <button 
-          onClick={() => setMode(AppMode.MONITOR)} 
-          className="group relative bg-gradient-to-br from-white to-sky-50 p-5 rounded-[3rem] shadow-[0_20px_40px_rgba(186,230,253,0.3)] flex flex-col items-center justify-center gap-4 aspect-square transition-all duration-300 hover:scale-[1.03] active:scale-95 border border-sky-100 overflow-hidden"
-        >
-          <div className="w-20 h-20 flex items-center justify-center relative z-10">
-            <svg className="absolute inset-0 w-full h-full text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <rect x="6" y="2" width="12" height="20" rx="6" />
-              <circle cx="12" cy="8.5" r="5" fill="white" />
-            </svg>
-
-            <div className="absolute top-[35.4%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[34px] h-[34px] rounded-full overflow-hidden flex items-center justify-center z-20">
-              <div 
-                className="absolute w-[24px] h-[24px] rounded-full blur-[0.9px] opacity-90" 
-                style={{
-                  background: 'radial-gradient(circle at 35% 35%, rgba(103, 232, 249, 0.8) 0%, rgba(37, 99, 235, 0.85) 60%, rgba(15, 23, 42, 1) 100%)'
-                }}
-              />
-              <div className="absolute w-1.5 h-1.5 bg-slate-950 rounded-full blur-[0.3px]"></div>
-              <div className="absolute top-0 left-0 w-full h-1/2 bg-white origin-top animate-eye-refined"></div>
-              <div className="absolute bottom-0 left-0 w-full h-1/2 bg-white origin-bottom animate-eye-refined"></div>
-            </div>
-            
-            <div className="absolute -top-1 -right-1 bg-white p-1.5 rounded-full shadow-lg border border-sky-50 animate-premium-beat z-30">
-              <svg className="w-4 h-4 text-rose-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-              </svg>
-            </div>
-          </div>
-          <div className="text-center relative z-10">
-            <h3 className="font-bold text-slate-700 text-xl leading-none">BaBy</h3>
-            <p className="text-[8px] text-sky-400 uppercase font-black tracking-[0.2em] mt-1.5">{t.mode_camera}</p>
-          </div>
-        </button>
-
-        {/* MODO PADRES */}
-        <button 
-          onClick={() => setMode(AppMode.PARENT)} 
-          className="group relative bg-gradient-to-br from-white to-rose-50 p-5 rounded-[3rem] shadow-[0_20px_40px_rgba(252,231,243,0.3)] flex flex-col items-center justify-center gap-4 aspect-square transition-all duration-300 hover:scale-[1.03] active:scale-95 border border-rose-100 overflow-hidden"
-        >
-          <div className="w-20 h-20 flex items-center justify-center relative z-10">
-            <svg className="w-12 h-12 text-rose-500 filter drop-shadow-sm relative z-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="5" y="2" width="14" height="20" rx="3" fill="currentColor" fillOpacity="0.05"/>
-              <path d="M12 18h.01" strokeWidth="3" />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-12 h-12 border-2 border-rose-200 rounded-full animate-[ping_2.5s_linear_infinite] opacity-40"></div>
-              <div className="w-16 h-16 border-2 border-rose-100 rounded-full animate-[ping_3s_linear_infinite] opacity-20 absolute"></div>
-            </div>
-            <div className="absolute -bottom-1 -right-1 bg-white p-1.5 rounded-full shadow-lg border border-rose-50">
-              <svg className="w-4 h-4 text-rose-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
-              </svg>
-            </div>
-          </div>
-          <div className="text-center relative z-10">
-            <h3 className="font-bold text-slate-700 text-xl leading-none">{t.parent_title}</h3>
-            <p className="text-[8px] text-rose-400 uppercase font-black tracking-[0.2em] mt-1.5">{t.mode_monitor}</p>
-          </div>
-        </button>
-      </div>
-
-      <div className="w-full max-w-sm">
-        <InstallPrompt />
-      </div>
-
-      <div className="mt-6 mb-4 text-center flex flex-col items-center gap-1">
-        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{t.version_label}</p>
+      {/* INFO DE SISTEMA AL FINAL (BATERÍA ARRIBA, VERSIÓN ABAJO) */}
+      <div className="mt-auto mb-6 flex flex-col items-center gap-1 opacity-40">
         {localBattery && (
-          <div className="flex items-center gap-1.5 opacity-40 group hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold text-slate-500">{Math.round(localBattery.level * 100)}%</span>
             <div className="w-5 h-2.5 border border-slate-400 rounded-[2px] p-[1px] relative">
               <div 
@@ -211,6 +206,9 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+          TiNO V1.4.0 - NATIVE EDITION
+        </p>
       </div>
     </div>
   );
@@ -320,7 +318,7 @@ const App: React.FC = () => {
     );
   };
 
-  const renderContent = () => {
+ const renderContent = () => {
     if (mode === AppMode.MONITOR) return <BabyMonitor onBack={() => { setMode(AppMode.SELECTION); refreshHistory(); }} lang={language} />;
     if (mode === AppMode.PARENT) return <ParentStation onBack={() => { setMode(AppMode.SELECTION); refreshHistory(); }} lang={language} />;
     return (
@@ -333,6 +331,7 @@ const App: React.FC = () => {
             <div className="p-8 animate-fade-in pt-12 pt-safe">
                <h2 className="text-lg font-black text-slate-900 mb-2 mt-4">{t.tab_config}</h2>
                <div className="space-y-6 mt-10">
+                 {/* BLOQUE IDIOMA */}
                  <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100 w-full">
                     <div className="flex items-center justify-between gap-4">
                       <h3 className="font-black text-slate-800 text-sm">🌐 {t.language}</h3>
@@ -342,6 +341,7 @@ const App: React.FC = () => {
                       </div>
                     </div>
                  </div>
+                 {/* BLOQUE IDENTIFICACIÓN */}
                  <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100 w-full">
                    <h3 className="font-black text-slate-800 text-sm">🪪 {t.dev_name_title}</h3>
                    {isEditingName ? (
@@ -356,50 +356,53 @@ const App: React.FC = () => {
                       </div>
                    )}
                  </div>
+                 {/* BLOQUE RESPALDO */}
                  <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100 w-full">
-                    <h3 className="font-black text-slate-800 text-sm mb-3">{t.backup_title}</h3>
+                    <h3 className="font-black text-slate-800 text-sm mb-3">💾 {t.backup_title}</h3>
                     <button onClick={handleDownloadBackup} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-[9px] tracking-widest uppercase">{t.backup_btn}</button>
+                 </div>
+                 {/* BLOQUE TUTORIAL (NUEVO) */}
+                 <div className="bg-white px-7 py-4 rounded-[2.2rem] shadow-sm border border-slate-100 w-full">
+                    <h3 className="font-black text-slate-800 text-sm mb-3">📖 {t.help_title || 'Ayuda'}</h3>
+                    <button 
+                      onClick={() => setShowTutorial(true)} 
+                      className="w-full py-4 bg-slate-800 text-white rounded-2xl font-black text-[10px] tracking-widest uppercase"
+                    >
+                      VER TUTORIAL
+                    </button>
                  </div>
                </div>
             </div>
           )}
         </div>
         
-        {/* BARRA DE NAVEGACIÓN INFERIOR - RESTAURADA Y CENTRADA */}
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-48px)] max-w-sm h-20 bg-white/95 backdrop-blur-3xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-around items-center z-[60]">
-          {/* BOTÓN INICIO (LOGO TiNO) */}
-          <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'home' ? 'scale-110' : 'opacity-40'}`}>
-            <div className={`w-7 h-7 rounded-full overflow-hidden border-2 mb-1 shadow-sm transition-colors ${activeTab === 'home' ? 'border-indigo-400' : 'border-slate-200'}`}>
+        {/* BARRA DE NAVEGACIÓN INFERIOR */}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[360px] h-20 bg-white/90 backdrop-blur-2xl border border-white/40 rounded-[2.5rem] shadow-2xl flex justify-between items-center px-4 z-[60]">
+          
+          <button onClick={() => { setActiveTab('home'); setSelectedLogDevice(null); }} className="flex flex-col items-center justify-center flex-1">
+            <div className={`w-8 h-8 rounded-full overflow-hidden border-2 mb-1 transition-all ${activeTab === 'home' ? 'border-indigo-400 scale-110 shadow-md' : 'border-slate-100 opacity-40'}`}>
                <img src={BRAND_LOGO} alt="Inicio" className="w-full h-full object-cover" />
             </div>
-            <span className={`text-[8px] font-black uppercase ${activeTab === 'home' ? 'text-indigo-600' : 'text-slate-400'}`}>{t.tab_home}</span>
+            <span className={`text-[9px] font-black uppercase transition-colors ${activeTab === 'home' ? 'text-indigo-600' : 'text-slate-400'}`}>{t.tab_home}</span>
           </button>
-          
-          {/* BOTÓN EQUIPOS */}
-          <button onClick={() => { setActiveTab('devices'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
-            <svg className="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="8" y="2" width="10" height="16" rx="2" />
-              <rect x="4" y="6" width="10" height="16" rx="2" fill="white" fillOpacity="0.7" />
-              <circle cx="9" cy="19" r="0.5" fill="currentColor" stroke="none" />
-            </svg>
-            <span className="text-[8px] font-black uppercase tracking-tighter">{t.tab_devices}</span>
+
+          <button onClick={() => { setActiveTab('devices'); setSelectedLogDevice(null); }} className="flex flex-col items-center justify-center flex-1">
+            <div className={`transition-all ${activeTab === 'devices' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+            </div>
+            <span className={`text-[9px] font-black uppercase transition-colors ${activeTab === 'devices' ? 'text-indigo-600' : 'text-slate-400'}`}>{t.tab_devices}</span>
           </button>
-          
-          {/* BOTÓN AJUSTES */}
-          <button onClick={() => { setActiveTab('settings'); setSelectedLogDevice(null); }} className={`flex flex-col items-center justify-center flex-1 transition-all ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
-            <svg className="w-6 h-6 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
-              <circle cx="4" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="12" cy="10" r="1.5" fill="currentColor" />
-              <circle cx="20" cy="14" r="1.5" fill="currentColor" />
-            </svg>
-            <span className="text-[8px] font-black uppercase tracking-tighter">{t.tab_config}</span>
+
+          <button onClick={() => { setActiveTab('settings'); setSelectedLogDevice(null); }} className="flex flex-col items-center justify-center flex-1">
+            <div className={`transition-all ${activeTab === 'settings' ? 'text-indigo-600 scale-110' : 'text-slate-300'}`}>
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+            </div>
+            <span className={`text-[9px] font-black uppercase transition-colors ${activeTab === 'settings' ? 'text-indigo-600' : 'text-slate-400'}`}>{t.tab_config}</span>
           </button>
         </div>
       </div>
     );
   };
-
   return <div className="h-full w-full fixed inset-0 overflow-hidden font-sans select-none" style={V85_GRADIENT}>{renderContent()}</div>;
 };
 

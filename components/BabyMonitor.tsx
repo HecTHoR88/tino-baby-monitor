@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Peer, MediaConnection, DataConnection } from 'peerjs';
 import QRCode from 'qrcode';
@@ -153,14 +154,10 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   }, [connectedPeers.length]);
 
   const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | 'medium' | 'low') => {
-      // Optimizamos para no detener el audio si ya hay un stream activo
       if (streamRef.current) {
-          // Solo detenemos los tracks de video previos para evitar cortes de audio
           streamRef.current.getVideoTracks().forEach(t => t.stop());
-          // Si estamos cambiando solo la cámara, mantenemos el streamRef pero actualizamos tracks
       }
       
-      // REGLA DE ORO: frameRate limitado para ahorrar ancho de banda
       const constraints = {
           high: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 20 } },
           medium: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } },
@@ -176,10 +173,7 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           const newVideoTrack = mediaStream.getVideoTracks()[0];
           const newAudioTrack = mediaStream.getAudioTracks()[0];
 
-          // Actualizamos el stream global
           if (streamRef.current) {
-              // Si ya existía, reemplazamos tracks. El audio se reemplaza también pero es casi instantáneo.
-              // Para evitar el corte total, PeerJS requiere que la llamada siga activa.
               streamRef.current.addTrack(newVideoTrack);
               streamRef.current.getTracks().forEach(t => {
                   if (t.kind === 'video' && t !== newVideoTrack) {
@@ -210,7 +204,6 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
               setTimeout(() => toggleFlash(true), 1500);
           }
           
-          // REGLA DE ORO: Usar replaceTrack para no cortar la conexión activa
           activeCallsRef.current.forEach(call => {
               if (call.peerConnection) {
                   call.peerConnection.getSenders().forEach(sender => {
@@ -266,8 +259,10 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   };
 
   const setupPeer = (token: string) => {
-    const myId = getDeviceId();
-    const peer = new Peer(myId, { 
+    // REGLA DE ORO: Generación de ID de 6 dígitos numéricos
+    const numericId = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    const peer = new Peer(numericId, { 
         config: { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -467,8 +462,8 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           </div>
       )}
 
-      {/* ENCABEZADO OPTIMIZADO: pt-2 para subir botones al máximo en Fullscreen Nativo */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-3 pt-2 flex justify-between items-start">
+      {/* REGLA DE ORO: Cabecera con Iconos SVG Soft-Premium */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-3 pt-4 flex justify-between items-start">
         <div className="flex flex-col gap-1.5">
             <div className="bg-white/90 backdrop-blur-md shadow-sm px-3 py-1.5 rounded-full flex items-center gap-2 w-max">
                 <div className={`w-2 h-2 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
@@ -480,11 +475,13 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
                 </button>
             )}
         </div>
-        <div className="flex gap-2">
-            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-sm w-9 h-9 rounded-full flex items-center justify-center text-slate-700 active:scale-95 transition-all">
-                <span className="text-lg">⚙️</span>
+        <div className="flex gap-3 pr-2">
+            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-lg w-10 h-10 rounded-full flex items-center justify-center text-slate-700 active:scale-90 transition-all border border-white">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
             </button>
-            <button onClick={onBack} className="bg-white/90 shadow-sm w-9 h-9 mr-4 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-all">✕</button>
+            <button onClick={onBack} className="bg-white/90 shadow-lg w-10 h-10 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-all border border-white">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
         </div>
       </div>
 
@@ -498,39 +495,55 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
         />
         
-        {/* ETIQUETAS DE ESTADO COMPACTAS: text-[9px] y padding reducido para no estorbar la visión */}
-        <div className="absolute bottom-4 left-4 flex flex-col gap-1 z-30">
-            <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-sky-600 text-[9px] font-bold animate-pulse shadow-sm flex items-center gap-1 w-max"><span>🧠</span> {t.ai_active}</div>
-            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-indigo-500 text-[9px] font-bold animate-pulse shadow-sm flex items-center gap-1 w-max"><span>🎵</span> {t.lullaby_active}</div>}
-            {isNightVision && (
-                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-amber-500 text-[9px] font-bold shadow-sm flex items-center gap-1 w-max">
-                    <span>⚡</span> {t.flash_on}
+        {/* REGLA DE ORO: Burbujas de estado con iconos SVG compactos */}
+        <div className="absolute bottom-4 left-4 flex flex-col gap-1.5 z-30">
+            <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-sky-600 text-[9px] font-black animate-pulse shadow-sm flex items-center gap-1.5 w-max">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                {t.ai_active}
+            </div>
+            {isLullabyOn && (
+                <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-indigo-500 text-[9px] font-black animate-pulse shadow-sm flex items-center gap-1.5 w-max">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
+                    {t.lullaby_active}
                 </div>
             )}
-            <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-slate-600 text-[9px] font-bold shadow-sm flex items-center gap-1 uppercase w-max">
-                <span>📹</span> {currentQuality.toUpperCase()}
+            {isNightVision && (
+                <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-amber-500 text-[9px] font-black shadow-sm flex items-center gap-1.5 w-max">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>
+                    {t.flash_on}
+                </div>
+            )}
+            <div className="bg-white/90 backdrop-blur px-2 py-1 rounded-lg text-slate-600 text-[9px] font-black shadow-sm flex items-center gap-1.5 uppercase w-max">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                {currentQuality.toUpperCase()}
             </div>
         </div>
       </div>
 
       {showQrPanel && (
           <div className="flex-1 p-6 flex flex-col items-center justify-start overflow-y-auto no-scrollbar animate-fade-in">
-            <div className="w-full max-w-sm flex flex-col items-center pt-4">
-                <div className="bg-white p-4 rounded-[2rem] shadow-lg shadow-slate-200/50 mb-6 border border-slate-100">
-                    {qrCodeUrl && <img src={qrCodeUrl} className="w-48 h-48 rounded-xl" alt="QR" />}
+            <div className="w-full max-w-sm flex flex-col items-center pt-2">
+                <div className="bg-white p-4 rounded-[2.5rem] shadow-xl border border-slate-50 mb-4">
+                    {qrCodeUrl && <img src={qrCodeUrl} className="w-48 h-48 rounded-2xl" alt="QR" />}
                 </div>
-                <h2 className="text-xl font-extrabold text-slate-800">{t.link_device}</h2>
-                <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider mt-1 mb-4">{t.secure_conn}</p>
-                <p className="text-slate-400 text-center text-sm mb-6 px-4">{t.scan_instruction}</p>
+                
+                {/* REGLA DE ORO: ID Manual Visible de 6 dígitos */}
+                <div className="bg-slate-100/80 px-4 py-2 rounded-2xl mb-4 border border-slate-200">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">ID MANUAL: <span className="text-indigo-600 text-sm font-mono tracking-normal">{peerId}</span></p>
+                </div>
+
+                <h2 className="text-xl font-black text-slate-800 tracking-tight">{t.link_device}</h2>
+                <p className="text-[9px] text-emerald-500 font-black uppercase tracking-widest mt-1 mb-4">{t.secure_conn}</p>
+                <p className="text-slate-400 text-center text-xs mb-6 px-6 leading-relaxed">{t.scan_instruction}</p>
                 
                 {connectedPeers.length > 0 && (
                     <div className="w-full">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 pl-2">{t.connected_users} ({connectedPeers.length})</h3>
+                        <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-2">{t.connected_users} ({connectedPeers.length})</h3>
                         <div className="space-y-2">
                             {connectedPeers.map(peer => (
-                                <div key={peer.id} className="bg-white p-3 rounded-xl border border-emerald-100 flex items-center gap-3 shadow-sm">
+                                <div key={peer.id} className="bg-white p-3 rounded-2xl border border-emerald-50 flex items-center gap-3 shadow-sm">
                                     <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center text-sm">📱</div>
-                                    <span className="text-sm font-bold text-slate-700 truncate">{peer.name}</span>
+                                    <span className="text-xs font-black text-slate-700 truncate">{peer.name}</span>
                                 </div>
                             ))}
                         </div>
@@ -540,53 +553,47 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           </div>
       )}
 
+      {/* REGLA DE ORO: Modal de Preferencias Compacto (max-w-[300px]) */}
       {showSettings && (
-          <div className="absolute inset-0 z-[80] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center animate-fade-in p-6" onClick={() => setShowSettings(false)}>
-              <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl space-y-5" onClick={e => e.stopPropagation()}>
-                  <div className="flex justify-between items-center mb-2">
-                      <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">{t.settings_modal}</h2>
-                      <button onClick={() => setShowSettings(false)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold">✕</button>
+          <div className="absolute inset-0 z-[80] bg-slate-900/40 backdrop-blur-md flex items-center justify-center animate-fade-in p-6" onClick={() => setShowSettings(false)}>
+              <div className="bg-white/95 backdrop-blur-xl w-full max-w-[300px] rounded-[2.5rem] p-6 shadow-2xl space-y-5 border border-white" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-between items-center mb-1">
+                      <h2 className="text-lg font-black text-slate-800 tracking-tight">{t.settings_modal}</h2>
+                      <button onClick={() => setShowSettings(false)} className="w-7 h-7 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-bold active:scale-90">✕</button>
                   </div>
 
                   <div>
-                      <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pl-1">{t.cam_select}</h3>
-                      <div className="flex bg-slate-100 p-1 rounded-xl">
-                          <button onClick={() => changeCamera('environment')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${facingMode === 'environment' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-500'}`}>{t.back_cam}</button>
-                          <button onClick={() => changeCamera('user')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${facingMode === 'user' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-500'}`}>{t.front_cam}</button>
+                      <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5 pl-1">{t.cam_select}</h3>
+                      <div className="flex bg-slate-100/50 p-1 rounded-2xl border border-slate-100">
+                          <button onClick={() => changeCamera('environment')} className={`flex-1 py-1.5 rounded-xl text-[10px] font-black transition-all ${facingMode === 'environment' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400'}`}>{t.back_cam}</button>
+                          <button onClick={() => changeCamera('user')} className={`flex-1 py-1.5 rounded-xl text-[10px] font-black transition-all ${facingMode === 'user' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400'}`}>{t.front_cam}</button>
                       </div>
                   </div>
 
                   <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-slate-800 text-sm">{t.mic_title}</h3>
+                      <h3 className="font-black text-slate-700 text-xs">{t.mic_title}</h3>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={micEnabled} onChange={(e) => toggleMic(e.target.checked)} />
-                        <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-indigo-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                        <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-indigo-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-[16px]"></div>
                       </label>
                   </div>
 
                   <div>
-                      <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pl-1">{t.res_title}</h3>
-                      <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1.5 pl-1">{t.res_title}</h3>
+                      <div className="flex bg-slate-100/50 p-1 rounded-2xl border border-slate-100">
                           {['low', 'medium', 'high'].map(q => (
-                              <button key={q} onClick={() => changeQuality(q as any)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${currentQuality === q ? 'bg-indigo-500 text-white' : 'text-slate-500'}`}>{q.toUpperCase()}</button>
+                              <button key={q} onClick={() => changeQuality(q as any)} className={`flex-1 py-1.5 rounded-xl text-[9px] font-black transition-all ${currentQuality === q ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400'}`}>{q.toUpperCase()}</button>
                           ))}
                       </div>
                   </div>
 
-                  <div>
-                      <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 pl-1">{t.sensitivity_title}</h3>
-                      <div className="flex bg-slate-100 p-1 rounded-xl">
-                          {['low', 'medium', 'high'].map(s => (
-                              <button key={s} onClick={() => setSensitivity(s as any)} className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${sensitivity === s ? 'bg-indigo-500 text-white' : 'text-slate-500'}`}>{t[`sens_${s.substring(0,3)}` as any] || s.toUpperCase()}</button>
-                          ))}
-                      </div>
-                  </div>
+                  {/* REGLA DE ORO: Sensibilidad IA eliminada de este modal */}
 
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                      <h3 className="font-bold text-slate-800 text-sm">{t.power_save}</h3>
+                      <h3 className="font-black text-slate-700 text-xs">{t.power_save}</h3>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={powerSaving} onChange={(e) => setPowerSaving(e.target.checked)} />
-                        <div className="w-10 h-6 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                        <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-[16px]"></div>
                       </label>
                   </div>
               </div>
