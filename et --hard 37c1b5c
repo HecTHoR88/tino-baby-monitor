@@ -1,0 +1,46 @@
+[33m6e575e2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge branch 'main' of https://github.com/HecTHoR88/tino-baby-monitor
+[33m8e9766a[m Actualización final completa
+[33ma674e13[m fix(BabyMonitor): Clean up media stream cleanup and header padding
+[33m37c1b5c[m Versión Estable 1.4.0 Nativa
+[33m4bc7fa5[m fix: Adjust header padding for native display
+[33m7edf158[m feat: Enable immersive fullscreen mode
+[33m3db742a[m feat: Update final build for v1.4.0
+[33md966a55[m fix: Restore and center bottom navigation bar
+[33m7845a96[m feat: Update version to 1.4.0 Native Edition
+[33m9019384[m feat: Enhance UI for safe areas and full screen
+[33m8bcad4f[m feat: Optimize for native experience and improve PWA
+[33m6f1c7bb[m refactor: Organize image assets in 'images' directory
+[33mfed3498[m Delete images/leeme.txt
+[33m5573b47[m Add files via upload
+[33mf0e5f17[m Create leeme.txt
+[33m4b4858a[m Delete images
+[33m9c5419c[m Create images
+[33me99cc19[m Delete images/tutorial3.png
+[33m60080e0[m Delete images/tutorial2.png
+[33m5764273[m Delete images/tutorial1.png
+[33m68b70e0[m Delete images/logo.png
+[33mcaaebe5[m feat: Use external URLs for asset images
+[33mae2f78e[m Delete tutorial3.png
+[33m4fe53d6[m Delete tutorial2.png
+[33m8042e0a[m Delete tutorial1.png
+[33ma88e99a[m Delete logo.png
+[33mbf36bb7[m Add files via upload
+[33m23fbfd4[m Delete images/tutorial3.png
+[33m2c52b3a[m Delete images/tutorial2.png
+[33m6955a2c[m Delete images/tutorial1.png
+[33m13d485c[m Delete images/logo.png
+[33m1ac7a3a[m feat: Update branding and service worker config
+[33mde48d9d[m feat: Add AI sensitivity control and camera switching
+[33m187d83f[m fix: Consolidate design and correct logging bug
+[33m8a1f620[m fix(settings): Adjust padding for language and dev name cards
+[33m58ed0c7[m feat: Update branding and UI elements
+[33m072115d[m feat: Update version and device backup naming
+[33m24431dc[m feat: Integrate dynamic branding and PWA manifest
+[33m5d24bd9[m feat: Update app description and manifest path
+[33m9dd6ab5[m fix: Move importmap to head and update app version
+[33mc57ee78[m feat: Improve install prompt and SW caching
+[33m91d55d9[m feat(vite): Add process.env to vite config
+[33m1091897[m feat: Update Google AI SDK
+[33m6dc885b[m build: Update dependencies and configurations
+[33mfb42856[m feat: Initialize TiNO Baby Monitor project
+[33mb5a080b[m Initial commit

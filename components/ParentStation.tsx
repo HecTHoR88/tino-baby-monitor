@@ -23,6 +23,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
   const [nightVision, setNightVision] = useState(false);
+  const [isNightVision, setIsNightVision] = useState(false); // Filtro digital local
   const [lullaby, setLullaby] = useState(false);
   const [remoteFacingMode, setRemoteFacingMode] = useState<'user' | 'environment'>('environment');
   
@@ -34,6 +35,11 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState(false);
   const [showLowBatteryWarning, setShowLowBatteryWarning] = useState(false);
+
+  // Monitor de Red
+  const [isNetworkUnstable, setIsNetworkUnstable] = useState(false);
+  const lastVideoTimeRef = useRef<number>(0);
+  const stabilityCheckIntervalRef = useRef<any>(null);
   
   const peerRef = useRef<Peer | null>(null);
   const dataConnRef = useRef<DataConnection | null>(null);
@@ -48,7 +54,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     const saved = secureStorage.getItem<MonitorHistoryItem[]>('monitor_history') || [];
     setHistory(saved);
     
-    // OPTIMIZACIÓN DE LATENCIA: Servidores ICE robustos y pool de candidatos
     const peer = new Peer(undefined as any, { 
         config: { 
             iceServers: [
@@ -93,8 +98,45 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     return () => { 
         peer.destroy(); stopScanner(); 
         if(localStreamRef.current) localStreamRef.current.getTracks().forEach(t=>t.stop()); 
+        if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
     };
   }, []);
+
+  // Monitor de Estabilidad de Red
+  useEffect(() => {
+    if (isConnected) {
+        stabilityCheckIntervalRef.current = setInterval(() => {
+            if (videoRef.current && !videoRef.current.paused) {
+                const currentTime = videoRef.current.currentTime;
+                if (currentTime === lastVideoTimeRef.current) {
+                    setIsNetworkUnstable(true);
+                } else {
+                    setIsNetworkUnstable(false);
+                }
+                lastVideoTimeRef.current = currentTime;
+            }
+        }, 3000); 
+    } else {
+        setIsNetworkUnstable(false);
+        if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
+    }
+    return () => {
+        if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
+    };
+  }, [isConnected]);
+
+  // REGLA DE ORO: Pre-calentar micrófono para audio instantáneo
+  const preWarmMicrophone = async () => {
+      try {
+          if (!localStreamRef.current) {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              stream.getAudioTracks().forEach(track => track.enabled = false);
+              localStreamRef.current = stream;
+          }
+      } catch (e) {
+          console.error("No se pudo pre-activar el micrófono:", e);
+      }
+  };
 
   const handleConnect = async (targetId: string, token?: string) => {
     if (!targetId || !peerRef.current) return;
@@ -105,8 +147,11 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     });
 
     conn.on('open', () => { 
-        setIsConnected(true); setConnectionStatus("");
+        setIsConnected(true); 
+        setConnectionStatus("");
         addToHistory(targetId, undefined, token); 
+        // Iniciamos el micrófono al conectar para respuesta instantánea
+        preWarmMicrophone();
     });
 
     conn.on('data', (data: any) => { 
@@ -138,29 +183,35 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       }
   };
   
+  // REGLA DE ORO: Audio instantáneo activando/desactivando track
   const toggleTalk = async (talking: boolean) => { 
       setIsTalking(talking); 
       if (talking) {
           try {
               if (!localStreamRef.current) {
-                  localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+                  await preWarmMicrophone();
               }
-              if (peerRef.current && connectionId) {
-                  const call = peerRef.current.call(connectionId, localStreamRef.current);
-                  talkCallRef.current = call;
+              if (localStreamRef.current) {
+                  localStreamRef.current.getAudioTracks().forEach(track => track.enabled = true);
+                  
+                  if (!talkCallRef.current && peerRef.current && connectionId) {
+                      const call = peerRef.current.call(connectionId, localStreamRef.current);
+                      talkCallRef.current = call;
+                  }
               }
           } catch (e) {
               console.error("No se pudo iniciar Talk:", e);
               setIsTalking(false);
           }
       } else {
+          if (localStreamRef.current) {
+              localStreamRef.current.getAudioTracks().forEach(track => track.enabled = false);
+          }
+          // No cerramos la llamada para mantener la conexión "caliente" y re-utilizarla si es posible
+          // O la cerramos si el protocolo lo requiere, pero el track ya estará listo.
           if (talkCallRef.current) {
               talkCallRef.current.close();
               talkCallRef.current = null;
-          }
-          if (localStreamRef.current) {
-              localStreamRef.current.getTracks().forEach(t => t.stop());
-              localStreamRef.current = null;
           }
       }
   };
@@ -168,7 +219,10 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const sendCommand = (type: 'CMD_FLASH' | 'CMD_LULLABY' | 'CMD_CAMERA' | 'CMD_SENSITIVITY', value: any) => { 
       if (dataConnRef.current?.open) { 
           dataConnRef.current.send({ type, value }); 
-          if (type === 'CMD_FLASH') setNightVision(value); 
+          if (type === 'CMD_FLASH') {
+              setNightVision(value); 
+              setIsNightVision(value); // Sincronizamos filtro digital con flash remoto
+          }
           if (type === 'CMD_LULLABY') setLullaby(value); 
           if (type === 'CMD_SENSITIVITY') setSensitivity(value);
       } 
@@ -179,6 +233,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
           dataConnRef.current.send({ type: 'CMD_QUALITY', value: level });
           setVideoQuality(level);
           setShowQualityMenu(false);
+          setIsNetworkUnstable(false); 
       }
   };
 
@@ -189,7 +244,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-          // Aplicar espejo si es necesario al capturar
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
           ctx.drawImage(videoRef.current, 0, 0);
@@ -212,7 +266,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       if (existingIndex >= 0) {
         const oldItem = existingHistory[existingIndex];
         const lastLogTime = (oldItem.logs && oldItem.logs.length > 0) ? oldItem.logs[0] : 0;
-        
         const isTooRecent = (now - lastLogTime) < 60000;
         const newLogs = isTooRecent ? (oldItem.logs || [now]) : [now, ...(oldItem.logs || [])];
 
@@ -332,6 +385,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   return (
       <div className="flex flex-col h-full bg-slate-900 overflow-hidden">
           <div className="flex-1 relative bg-slate-900 rounded-b-[2.5rem] overflow-hidden shadow-2xl z-10">
+              {/* VIDEO CON FILTRO DIGITAL DE VISIÓN NOCTURNA */}
               <video 
                 ref={videoRef} 
                 autoPlay 
@@ -339,39 +393,52 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                 muted 
                 className="w-full h-full object-contain transition-all duration-300 ease-out" 
                 style={{ 
-                  transform: `scale(${zoomLevel}) scaleX(-1)` 
+                  transform: `scale(${zoomLevel}) scaleX(-1)`,
+                  filter: isNightVision ? 'brightness(1.5) contrast(1.2) saturate(0.8)' : 'none'
                 }} 
               />
               
-              <div className="absolute top-4 left-4 bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-2 z-20">
-                 <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                 <span className="text-white text-[10px] font-bold tracking-widest">{t.live_badge}</span>
-              </div>
+              {isNetworkUnstable && (
+                <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] animate-fade-in">
+                    <div className="bg-amber-500/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/20 flex items-center gap-2">
+                        <span className="text-white text-xs font-bold">⚠️ Conexión inestable. Se recomienda bajar la resolución</span>
+                    </div>
+                </div>
+              )}
 
-              <div className="absolute top-4 left-24 flex gap-2 z-20">
-                  <button onClick={() => setShowQualityMenu(!showQualityMenu)} className="bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full text-white text-[10px] font-bold border border-white/10 uppercase">{videoQuality}</button>
-                  <button onClick={() => {
+              {/* ETIQUETAS COMPACTAS (Burbujas Superiores) */}
+              <div className="absolute top-4 left-4 flex gap-2 z-20 overflow-x-auto no-scrollbar max-w-[60%]">
+                 <div className="bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg flex items-center gap-1.5 shrink-0 border border-white/10">
+                    <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                    <span className="text-white text-[9px] font-bold tracking-widest uppercase">{t.live_badge}</span>
+                 </div>
+                 
+                 <button onClick={() => setShowQualityMenu(!showQualityMenu)} className="bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg text-white text-[9px] font-bold border border-white/10 uppercase shrink-0">
+                    📹 {videoQuality}
+                 </button>
+                 
+                 <button onClick={() => {
                       const next = sensitivity === 'low' ? 'medium' : sensitivity === 'medium' ? 'high' : 'low';
                       sendCommand('CMD_SENSITIVITY', next);
-                  }} className="bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full text-white text-[10px] font-bold border border-white/10 uppercase">
-                      {t[`sens_${sensitivity.substring(0,3)}` as any] || sensitivity}
-                  </button>
+                  }} className="bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-lg text-white text-[9px] font-bold border border-white/10 uppercase shrink-0">
+                      🧠 {t[`sens_${sensitivity.substring(0,3)}` as any] || sensitivity}
+                 </button>
               </div>
 
               {showQualityMenu && (
-                  <div className="absolute top-14 left-24 bg-white rounded-xl shadow-2xl flex flex-col w-32 overflow-hidden z-50">
+                  <div className="absolute top-12 left-20 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl flex flex-col w-28 overflow-hidden z-50 border border-slate-100">
                       {['high', 'medium', 'low'].map((q: any) => (
-                          <button key={q} onClick={() => changeQuality(q)} className={`px-4 py-3 text-left text-xs font-bold ${videoQuality === q ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`}>{q.toUpperCase()}</button>
+                          <button key={q} onClick={() => changeQuality(q)} className={`px-4 py-2.5 text-left text-[10px] font-black tracking-tight ${videoQuality === q ? 'text-indigo-600 bg-indigo-50/50' : 'text-slate-600'}`}>{q.toUpperCase()}</button>
                       ))}
                   </div>
               )}
               
               {batteryLevel !== null && (
-                  <div className={`absolute top-4 right-4 bg-black/40 backdrop-blur px-3 py-1.5 rounded-full flex items-center gap-2 ${showLowBatteryWarning ? 'bg-rose-500 animate-pulse' : ''}`}>
-                      <span className="text-white text-xs font-bold">{Math.round(batteryLevel * 100)}%</span>
-                      <div className="w-6 h-3 border border-white/50 rounded-sm p-0.5 relative">
+                  <div className={`absolute top-4 right-4 bg-black/40 backdrop-blur px-2 py-0.5 rounded-lg flex items-center gap-1.5 ${showLowBatteryWarning ? 'bg-rose-500 animate-pulse' : 'border border-white/10'}`}>
+                      <span className="text-white text-[9px] font-black">{Math.round(batteryLevel * 100)}%</span>
+                      <div className="w-5 h-2.5 border border-white/50 rounded-[2px] p-[1px] relative">
                           <div className={`h-full rounded-px ${batteryLevel <= 0.2 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{width: `${batteryLevel * 100}%` }} />
-                          {isCharging && <span className="absolute -left-3 -top-1 text-[8px]">⚡</span>}
+                          {isCharging && <span className="absolute -left-2.5 -top-1 text-[8px]">⚡</span>}
                       </div>
                   </div>
               )}
@@ -387,27 +454,75 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
           
           <div className="bg-slate-50 p-6 pb-12">
               <div className="flex justify-between items-center mb-6">
-                 <div className="flex items-center gap-4 bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-100">
+                 <div className="flex items-center gap-4 bg-white/70 backdrop-blur-xl px-3 py-1.5 rounded-full shadow-sm border border-white">
                       <button onClick={() => handleZoom(-0.5)} className="text-slate-400 font-black px-2">-</button>
                       <div className="w-20 h-1 bg-slate-100 rounded-full"><div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${((zoomLevel - 1) / 2) * 100}%` }}></div></div>
                       <button onClick={() => handleZoom(0.5)} className="text-slate-400 font-black px-2">+</button>
                  </div>
-                 <button onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} className="text-rose-500 text-[10px] font-black tracking-widest bg-rose-50 px-4 py-2 rounded-full uppercase">CERRAR</button>
+                 <button onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} className="text-rose-500 text-[9px] font-black tracking-widest bg-rose-50/80 backdrop-blur px-4 py-2 rounded-full uppercase border border-rose-100">CERRAR</button>
               </div>
 
-              <div className="grid grid-cols-4 gap-3">
-                  <button onMouseDown={() => toggleTalk(true)} onMouseUp={() => toggleTalk(false)} onTouchStart={() => toggleTalk(true)} onTouchEnd={() => toggleTalk(false)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${isTalking ? 'bg-indigo-500 text-white scale-95 shadow-inner' : 'bg-white text-indigo-500 shadow-sm'}`}><span className="text-2xl">🎙️</span><span className="text-[9px] font-bold uppercase">{t.talk_btn}</span></button>
-                  <button onClick={() => sendCommand('CMD_LULLABY', !lullaby)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${lullaby ? 'bg-purple-500 text-white shadow-inner' : 'bg-white text-purple-500 shadow-sm'}`}><span className="text-2xl">🎵</span><span className="text-[9px] font-bold uppercase">{t.lullaby_btn}</span></button>
-                  <button onClick={() => sendCommand('CMD_FLASH', !nightVision)} className={`aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all ${nightVision ? 'bg-amber-500 text-white shadow-inner' : 'bg-white text-amber-500 shadow-sm'}`}><span className="text-2xl">💡</span><span className="text-[9px] font-bold uppercase">{t.light_btn}</span></button>
-                  <button onClick={takeSnapshot} className="aspect-square rounded-[1.5rem] flex flex-col items-center justify-center gap-2 transition-all bg-white text-emerald-500 shadow-sm active:scale-95">
-                    <span className="text-2xl">📸</span>
-                    <span className="text-[9px] font-bold uppercase">{t.snapshot_btn}</span>
+              {/* CUADRÍCULA DE BOTONES SOFT-PREMIUM */}
+              <div className="grid grid-cols-4 gap-4">
+                  {/* HABLAR */}
+                  <button 
+                    onMouseDown={() => toggleTalk(true)} 
+                    onMouseUp={() => toggleTalk(false)} 
+                    onTouchStart={() => toggleTalk(true)} 
+                    onTouchEnd={() => toggleTalk(false)} 
+                    className={`aspect-square rounded-[2rem] flex flex-col items-center justify-center gap-2 transition-all border border-white shadow-xl ${isTalking ? 'bg-indigo-500 text-white scale-95' : 'bg-white/70 backdrop-blur-xl text-indigo-500'}`}
+                  >
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                    </svg>
+                    <span className="text-[9px] font-black tracking-tighter uppercase">{t.talk_btn}</span>
+                  </button>
+
+                  {/* NANAS */}
+                  <button 
+                    onClick={() => sendCommand('CMD_LULLABY', !lullaby)} 
+                    className={`aspect-square rounded-[2rem] flex flex-col items-center justify-center gap-2 transition-all border border-white shadow-xl ${lullaby ? 'bg-purple-500 text-white' : 'bg-white/70 backdrop-blur-xl text-purple-500'}`}
+                  >
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l.31-.088a2.25 2.25 0 001.382-1.353V9m0 0V5.25A2.25 2.25 0 0016.5 3h-2.25a2.25 2.25 0 00-2.25 2.25V15m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l.31-.088A2.25 2.25 0 009 15.503V9z" />
+                    </svg>
+                    <span className="text-[9px] font-black tracking-tighter uppercase">{t.lullaby_btn}</span>
+                  </button>
+
+                  {/* MODO NOCHE (Luz) */}
+                  <button 
+                    onClick={() => sendCommand('CMD_FLASH', !nightVision)} 
+                    className={`aspect-square rounded-[2rem] flex flex-col items-center justify-center gap-2 transition-all border border-white shadow-xl ${nightVision ? 'bg-amber-500 text-white' : 'bg-white/70 backdrop-blur-xl text-amber-500'}`}
+                  >
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                    </svg>
+                    <span className="text-[9px] font-black tracking-tighter uppercase">NOCHE</span>
+                  </button>
+
+                  {/* CAPTURA (Foto) */}
+                  <button 
+                    onClick={takeSnapshot} 
+                    className="aspect-square rounded-[2rem] bg-white/70 backdrop-blur-xl border border-white text-emerald-500 flex flex-col items-center justify-center gap-2 transition-all shadow-xl active:scale-95"
+                  >
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                    <span className="text-[9px] font-black tracking-tighter uppercase">CAPTURAR</span>
                   </button>
               </div>
-              <div className="mt-4 flex justify-center">
-                  <button onClick={() => sendCommand('CMD_CAMERA', remoteFacingMode === 'user' ? 'environment' : 'user')} className="w-full bg-white py-3 rounded-2xl shadow-sm flex items-center justify-center gap-3 active:scale-95 transition-all text-sky-500">
-                    <span className="text-xl">🔄</span>
-                    <span className="text-[10px] font-black uppercase tracking-widest">{t.cam_select}</span>
+
+              {/* GIRAR CÁMARA */}
+              <div className="mt-6 flex justify-center">
+                  <button 
+                    onClick={() => sendCommand('CMD_CAMERA', remoteFacingMode === 'user' ? 'environment' : 'user')} 
+                    className="w-full bg-white/70 backdrop-blur-xl border border-white py-4 rounded-3xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all text-sky-500"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">{t.cam_select}</span>
                   </button>
               </div>
           </div>

@@ -153,13 +153,16 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   }, [connectedPeers.length]);
 
   const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | 'medium' | 'low') => {
+      // Optimizamos para no detener el audio si ya hay un stream activo
       if (streamRef.current) {
-          streamRef.current.getTracks().forEach(t => t.stop());
-          streamRef.current = null;
+          // Solo detenemos los tracks de video previos para evitar cortes de audio
+          streamRef.current.getVideoTracks().forEach(t => t.stop());
+          // Si estamos cambiando solo la cámara, mantenemos el streamRef pero actualizamos tracks
       }
       
+      // REGLA DE ORO: frameRate limitado para ahorrar ancho de banda
       const constraints = {
-          high: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24 } },
+          high: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 20 } },
           medium: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } },
           low: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 10 } }
       };
@@ -170,16 +173,32 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
               audio: { echoCancellation: true, noiseSuppression: true }
           });
 
-          streamRef.current = mediaStream;
-          const videoTrack = mediaStream.getVideoTracks()[0];
-          const settings = videoTrack.getSettings();
+          const newVideoTrack = mediaStream.getVideoTracks()[0];
+          const newAudioTrack = mediaStream.getAudioTracks()[0];
+
+          // Actualizamos el stream global
+          if (streamRef.current) {
+              // Si ya existía, reemplazamos tracks. El audio se reemplaza también pero es casi instantáneo.
+              // Para evitar el corte total, PeerJS requiere que la llamada siga activa.
+              streamRef.current.addTrack(newVideoTrack);
+              streamRef.current.getTracks().forEach(t => {
+                  if (t.kind === 'video' && t !== newVideoTrack) {
+                      streamRef.current?.removeTrack(t);
+                      t.stop();
+                  }
+              });
+          } else {
+              streamRef.current = mediaStream;
+          }
+
+          const settings = newVideoTrack.getSettings();
           const actualFacing = settings.facingMode as any || faceMode;
           
           setFacingMode(actualFacing);
           setCurrentQuality(quality);
 
           if (localVideoRef.current) {
-              localVideoRef.current.srcObject = mediaStream;
+              localVideoRef.current.srcObject = streamRef.current;
               localVideoRef.current.muted = true;
           }
 
@@ -191,10 +210,15 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
               setTimeout(() => toggleFlash(true), 1500);
           }
           
+          // REGLA DE ORO: Usar replaceTrack para no cortar la conexión activa
           activeCallsRef.current.forEach(call => {
               if (call.peerConnection) {
                   call.peerConnection.getSenders().forEach(sender => {
-                      if (sender.track?.kind === 'video') sender.replaceTrack(videoTrack).catch(() => {});
+                      if (sender.track?.kind === 'video') {
+                          sender.replaceTrack(newVideoTrack).catch(() => {});
+                      } else if (sender.track?.kind === 'audio' && newAudioTrack) {
+                          sender.replaceTrack(newAudioTrack).catch(() => {});
+                      }
                   });
               }
           });
@@ -206,67 +230,26 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   };
 
   const toggleFlash = async (enable: boolean) => {
-      setIsNightVision(enable);
-      
-      if (lightTrackRef.current) {
-          try { 
-              lightTrackRef.current.stop(); 
-              const owner = (lightTrackRef.current as any)._streamOwner;
-              if (owner) owner.getTracks().forEach((t: any) => t.stop());
-          } catch(e){}
-          lightTrackRef.current = null;
-      }
+    setIsNightVision(enable);
+    const nativeFlashlight = (window as any).plugins?.flashlight;
 
-      if (!enable) {
-          if (streamRef.current) {
-              const track = streamRef.current.getVideoTracks()[0];
-              try { await track.applyConstraints({ advanced: [{ torch: false } as any] }); } catch(e){}
-          }
-          return;
-      }
-
-      if (!streamRef.current) return;
-
-      const attemptTorch = async (track: MediaStreamTrack) => {
-          try {
-              await track.applyConstraints({ advanced: [{ torch: true } as any] });
-              return true;
-          } catch (e) { return false; }
-      };
-
-      let success = false;
-      if (facingMode === 'environment') {
-          success = await attemptTorch(streamRef.current.getVideoTracks()[0]);
-      }
-
-      if (!success) {
-          try {
-              const auxStream = await navigator.mediaDevices.getUserMedia({
-                  video: { 
-                      facingMode: 'environment',
-                      width: { ideal: 1 }, 
-                      height: { ideal: 1 } 
-                  }
-              });
-              const auxTrack = auxStream.getVideoTracks()[0];
-              (auxTrack as any)._streamOwner = auxStream;
-              success = await attemptTorch(auxTrack);
-              
-              if (success) {
-                  lightTrackRef.current = auxTrack;
-              } else {
-                  auxStream.getTracks().forEach(t => t.stop());
-              }
-          } catch (e) {
-              console.warn("Fallo canal secundario de luz:", e);
-          }
-      }
-
-      if (!success && enable) {
-          setTimeout(() => {
-              if (nightVisionRef.current) toggleFlash(true);
-          }, 1000);
-      }
+    if (nativeFlashlight) {
+        if (enable) {
+            nativeFlashlight.switchOn();
+        } else {
+            nativeFlashlight.switchOff();
+        }
+    } else {
+        if (!streamRef.current) return;
+        try {
+            const track = streamRef.current.getVideoTracks()[0];
+            await track.applyConstraints({
+                advanced: [{ torch: enable } as any]
+            });
+        } catch (e) {
+            console.warn("Flash no disponible");
+        }
+    }
   };
 
   const changeCamera = (mode: 'user' | 'environment') => {
@@ -484,24 +467,24 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           </div>
       )}
 
-      {/* ENCABEZADO REFINADO - pt-10 para asegurar visibilidad en Notch nativo */}
-      <div className="absolute top-0 left-0 right-0 z-20 p-4 pt-10 flex justify-between items-start mt-safe">
-        <div className="flex flex-col gap-2">
-            <div className="bg-white/90 backdrop-blur-md shadow-sm px-4 py-2 rounded-full flex items-center gap-2 w-max">
-                <div className={`w-2.5 h-2.5 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
-                <span className="text-slate-600 text-xs font-bold tracking-wide uppercase">{serverStatus === 'connected' ? t.online : t.connecting}</span>
+      {/* ENCABEZADO OPTIMIZADO: pt-2 para subir botones al máximo en Fullscreen Nativo */}
+      <div className="absolute top-0 left-0 right-0 z-20 p-3 pt-2 flex justify-between items-start">
+        <div className="flex flex-col gap-1.5">
+            <div className="bg-white/90 backdrop-blur-md shadow-sm px-3 py-1.5 rounded-full flex items-center gap-2 w-max">
+                <div className={`w-2 h-2 rounded-full ${serverStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
+                <span className="text-slate-600 text-[10px] font-bold tracking-wide uppercase">{serverStatus === 'connected' ? t.online : t.connecting}</span>
             </div>
             {!showQrPanel && (
-                <button onClick={() => setShowQrPanel(true)} className="bg-white/90 shadow-sm px-4 py-2 rounded-full text-slate-500 text-xs font-bold w-max flex items-center gap-1">
+                <button onClick={() => setShowQrPanel(true)} className="bg-white/90 shadow-sm px-3 py-1.5 rounded-full text-slate-500 text-[10px] font-bold w-max flex items-center gap-1">
                     <span>📱</span> {connectedPeers.length}/3
                 </button>
             )}
         </div>
-        <div className="flex gap-3">
-            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-700 active:scale-95 transition-all">
-                <span className="text-xl">⚙️</span>
+        <div className="flex gap-2">
+            <button onClick={() => setShowSettings(true)} className="bg-white/90 shadow-sm w-9 h-9 rounded-full flex items-center justify-center text-slate-700 active:scale-95 transition-all">
+                <span className="text-lg">⚙️</span>
             </button>
-            <button onClick={onBack} className="bg-white/90 shadow-sm w-10 h-10 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-all">✕</button>
+            <button onClick={onBack} className="bg-white/90 shadow-sm w-9 h-9 mr-4 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-all">✕</button>
         </div>
       </div>
 
@@ -515,15 +498,16 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
             style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
         />
         
-        <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-30">
-            <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-sky-600 text-xs font-bold animate-pulse shadow-sm flex items-center gap-2">🧠 {t.ai_active}</div>
-            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-indigo-500 text-xs font-bold animate-pulse shadow-sm flex items-center gap-2">🎵 {t.lullaby_active}</div>}
+        {/* ETIQUETAS DE ESTADO COMPACTAS: text-[9px] y padding reducido para no estorbar la visión */}
+        <div className="absolute bottom-4 left-4 flex flex-col gap-1 z-30">
+            <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-sky-600 text-[9px] font-bold animate-pulse shadow-sm flex items-center gap-1 w-max"><span>🧠</span> {t.ai_active}</div>
+            {isLullabyOn && <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-indigo-500 text-[9px] font-bold animate-pulse shadow-sm flex items-center gap-1 w-max"><span>🎵</span> {t.lullaby_active}</div>}
             {isNightVision && (
-                <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-amber-500 text-xs font-bold shadow-sm flex items-center gap-2">
-                    ⚡ {t.flash_on}
+                <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-amber-500 text-[9px] font-bold shadow-sm flex items-center gap-1 w-max">
+                    <span>⚡</span> {t.flash_on}
                 </div>
             )}
-            <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-xl text-slate-600 text-xs font-bold shadow-sm flex items-center gap-2 uppercase">
+            <div className="bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-slate-600 text-[9px] font-bold shadow-sm flex items-center gap-1 uppercase w-max">
                 <span>📹</span> {currentQuality.toUpperCase()}
             </div>
         </div>
