@@ -5,6 +5,7 @@ import { MonitorHistoryItem, Language } from '../types';
 import { getDeviceName, getDeviceId } from '../services/deviceStorage';
 import { secureStorage } from '../services/secureStorage';
 import { translations } from '../services/translations';
+const V85_GRADIENT = { background: 'linear-gradient(180deg, #bae6fd 0%, #fce7f3 100%)' };
 
 interface ParentStationProps { 
     onBack: () => void;
@@ -339,45 +340,128 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       setZoomLevel(prev => Math.min(Math.max(prev + delta, 1), 3));
   };
 
-  if (isScanning) return (
-      <div className="h-full bg-slate-900 relative flex flex-col items-center justify-center">
-          <video ref={scannerVideoRef} className="w-full h-full object-cover opacity-80" playsInline />
-          <canvas ref={scannerCanvasRef} className="hidden" />
-          <div className="absolute top-10 px-6 py-2 bg-white/20 backdrop-blur-md rounded-full text-white font-bold">{t.secure_badge}</div>
-          <button onClick={stopScanner} className="absolute bottom-10 bg-white text-slate-900 px-8 py-3 rounded-full font-bold shadow-lg">{t.cancel_btn}</button>
-      </div>
-  );
-
   if (!isConnected) return (
-      <div className="h-full bg-slate-50 p-6 flex flex-col font-sans text-slate-700">
-          <div className="flex items-center justify-between mb-8">
-              <button onClick={onBack} className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400">←</button>
-              <h2 className="text-slate-800 font-extrabold text-xl">{t.connect_title}</h2>
-              <div className="w-10"></div>
-          </div>
-          <div className="flex-1 overflow-y-auto no-scrollbar">
-              {connectionStatus && <div className="mb-6 p-4 bg-amber-50 rounded-2xl text-amber-600 text-sm font-bold flex items-center gap-3"><span>⚠️</span> {connectionStatus}</div>}
-              <button onClick={startScanner} className="w-full aspect-[2/1] bg-gradient-to-br from-indigo-500 to-violet-600 rounded-[2rem] p-6 flex flex-col justify-end shadow-xl relative overflow-hidden group mb-8">
-                  <div className="absolute top-6 right-6 text-6xl opacity-20 text-white">📷</div>
-                  <h3 className="text-2xl font-bold text-white mb-1">{t.scan_qr_btn}</h3>
-                  <p className="text-indigo-100 text-sm">{t.scan_qr_desc}</p>
+      <div className="flex flex-col h-full overflow-hidden relative font-sans" style={V85_GRADIENT}>
+          
+          {/* HEADER PREMIUM COMPACTO */}
+          <div className="p-8 pb-4 flex items-center justify-between relative">
+              <button onClick={onBack} className="w-12 h-12 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-slate-400 active:scale-90 transition-all">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path d="M15 19l-7-7 7-7" /></svg>
               </button>
-              <div className="mb-8 flex gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-                  <input value={connectionId} onChange={e=>setConnectionId(e.target.value)} placeholder={t.manual_id} className="flex-1 px-4 py-2 outline-none font-mono"/>
-                  <button onClick={() => handleConnect(connectionId)} className="bg-slate-800 text-white px-5 rounded-xl font-bold">Ir</button>
-              </div>
-              <h3 className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-4 ml-2">{t.conn_history}</h3>
-              {history.length > 0 ? history.map(h => (
-                  <button key={h.id} onClick={() => { setConnectionId(h.id); handleConnect(h.id, h.token); }} className="w-full bg-white p-4 rounded-2xl mb-3 flex items-center gap-4 hover:shadow-md border border-slate-100 transition-all active:scale-95 text-left">
-                      <div className="w-12 h-12 rounded-full bg-sky-50 flex items-center justify-center text-xl">👶</div>
-                      <div className="flex-1 overflow-hidden">
-                        <p className="text-slate-800 font-bold truncate">{h.name}</p>
-                        <p className="text-slate-400 text-[10px] font-bold uppercase">{t.last_connection}: {new Date(h.lastConnected).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+              <h2 className="absolute left-1/2 -translate-x-1/2 text-xl font-black text-slate-800 tracking-tighter">Panel de Control</h2>
+          </div>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar px-8">
+              {/* TARJETA DE ESCANEO PRO (EL RECUADRO MORADO) */}
+              <div className="relative group mb-10 mt-2">
+                <button 
+                  onClick={isScanning ? stopScanner : startScanner}
+                  className="w-full aspect-[4/3] bg-gradient-to-br from-indigo-700 via-purple-600 to-indigo-800 rounded-[3.5rem] shadow-[0_25px_50px_-12px_rgba(79,70,229,0.5)] overflow-hidden flex flex-col items-center justify-center relative transition-all active:scale-[0.98]"
+                >
+                    {isScanning ? (
+                      <div className="absolute inset-0 w-full h-full">
+                        {/* EL VIDEO DENTRO DEL RECUADRO */}
+                        <video ref={scannerVideoRef} className="w-full h-full object-cover opacity-80" playsInline />
+                        
+                        {/* MARCO DE ENCUADRE Y LÁSER */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-56 h-48 relative">
+                                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl"></div>
+                                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl"></div>
+                                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl"></div>
+                                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl"></div>
+                                {/* LÁSER ROJO FLUIDO */}
+                                <div className="animate-laser-smooth"></div>
+                            </div>
+                        </div>
                       </div>
-                  </button>
-              )) : (
-                <div className="p-8 text-center text-slate-300 text-[10px] uppercase font-bold border-2 border-dashed border-slate-200 rounded-2xl">{t.history_empty}</div>
-              )}
+                    ) : (
+                      <div className="flex flex-col items-center relative">
+   
+   {/* CUADRO DINÁMICO - AJUSTE FINAL DE MÁRGENES Y POSICIÓN */}
+   <div className="relative w-40 h-40 mb-4 flex items-center justify-center"> {/* mb-8 cambiado a mb-4 para subir los textos */}
+      
+      {/* 1. Fondo con movimiento de colores (Mesh) */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-indigo-600 via-purple-500 to-pink-400 rounded-[3.5rem] animate-mesh shadow-[0_20px_50px_rgba(168,85,247,0.4)]"></div>
+      
+      {/* 2. Brillo giratorio */}
+      <div className="absolute w-full h-full animate-rotate-shine opacity-50">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-full bg-gradient-to-b from-white/40 to-transparent blur-xl"></div>
+      </div>
+
+      {/* 3. La burbuja de cristal interior - AHORA CON MARGEN MÁS PEQUEÑO (inset-5) */}
+      <div className="absolute inset-5 bg-white/10 backdrop-blur-2xl rounded-[2.2rem] border border-white/30 shadow-[inset_0_0_20px_rgba(255,255,255,0.2)] flex items-center justify-center overflow-hidden z-10">
+          
+          {/* Ondas de radar */}
+          <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-12 h-12 bg-white/10 rounded-full animate-ping opacity-30"></div>
+          </div>
+
+          {/* Icono QR Premium */}
+          <svg className="w-10 h-10 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.5)] relative z-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h6v6H3V3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6v6h-6V3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 15h6v6H3v-6z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 15h2m3 0h1m-4 3h1m2 0h1m-4 3h4" />
+              <rect x="18" y="18" width="1" height="1" fill="currentColor" />
+          </svg>
+      </div>
+   </div>
+   
+   {/* TEXTOS AHORA MÁS CERCA DEL CUADRO */}
+   <h3 className="text-xl font-black text-white mb-1 tracking-tight">Escanear QR</h3>
+   <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-[0.3em] opacity-80 animate-pulse">Pulse para conectar</p>
+</div>
+                    )}
+                </button>
+                <canvas ref={scannerCanvasRef} className="hidden" />
+              </div>
+
+             {/* INPUT MANUAL PILL-STYLE (MÁS FLACA Y TECLADO NUMÉRICO) */}
+<div className="mb-10 bg-white/90 backdrop-blur-xl p-1.5 rounded-full shadow-2xl border border-white flex items-center gap-3">
+    <input 
+      value={connectionId} 
+      onChange={e=>setConnectionId(e.target.value)} 
+      placeholder="ID de Cámara Manual" 
+      type="text"
+      inputMode="numeric"      // Abre teclado numérico en Android/iOS
+      pattern="[0-9]*"        // Asegura que el sistema entienda que son números
+      maxLength={6}           // Limita a los 6 dígitos que definimos
+      className="flex-1 bg-transparent px-6 font-bold text-slate-600 placeholder-slate-300 outline-none text-sm"
+    />
+    <button 
+      onClick={() => handleConnect(connectionId)} 
+      className="w-10 h-10 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M14 5l7 7-7 7M3 12h18" /></svg>
+    </button>
+</div>
+
+              {/* HISTORIAL PREMIUM CON ESTADO VACÍO */}
+              <h3 className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mb-6 ml-4">Cámaras Guardadas</h3>
+              <div className="space-y-4 pb-20">
+                  {history.length > 0 ? history.map(h => (
+                      <div key={h.id} className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-50 flex items-center justify-between animate-fade-in">
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-full bg-sky-50 flex items-center justify-center text-2xl shadow-inner">👶</div>
+                            <div className="flex-1 overflow-hidden">
+                                <p className="text-slate-800 font-bold truncate leading-tight text-sm">{h.name}</p>
+                                <p className="text-slate-400 text-[9px] font-black uppercase mt-0.5">VISTO: {new Date(h.lastConnected).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => { setConnectionId(h.id); handleConnect(h.id, h.token); }} 
+                            className="bg-indigo-50 text-indigo-600 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                          >
+                            CONECTAR
+                          </button>
+                      </div>
+                  )) : (
+                   <div className="p-12 text-center text-slate-300 text-[10px] uppercase font-black tracking-[0.2em] border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center min-h-[150px] animate-pulse">
+                   <span>NO HAY REGISTROS</span>
+                   </div>
+                  )}
+              </div>
           </div>
       </div>
   );
