@@ -6,7 +6,8 @@ import { getDeviceId, getDeviceName } from '../services/deviceStorage';
 import { secureStorage } from '../services/secureStorage';
 import { MonitorHistoryItem, Language } from '../types';
 import { translations } from '../services/translations';
-
+// Agregamos la nueva función a la lista, manteniendo las anteriores
+import { getDeviceId, getDeviceName, getPersistentNumericId } from '../services/deviceStorage';
 interface BabyMonitorProps {
   onBack: () => void;
   lang: Language;
@@ -146,45 +147,78 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     };
   }, []);
 
-  const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | 'medium' | 'low') => {
+ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | 'medium' | 'low') => {
+      // 1. PROTECCIÓN DE AUDIO: Guardamos la pista del micrófono si ya existe
+      const existingAudioTrack = streamRef.current?.getAudioTracks()[0];
+
+      // 2. LIMPIEZA PARCIAL: Detenemos ÚNICAMENTE las pistas de video
       if (streamRef.current) {
           streamRef.current.getVideoTracks().forEach(t => t.stop());
       }
+
       const constraints = {
-          high: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 20 } },
-          medium: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } },
-          low: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 10 } }
+          high: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 20 } },
+          medium: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 15 } },
+          low: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 10 } }
       };
+
       try {
+          // 3. PEDIMOS EL NUEVO VIDEO
+          // Si ya tenemos audio vivo, no pedimos uno nuevo (audio: false) para no cortar la señal
           const mediaStream = await navigator.mediaDevices.getUserMedia({
               video: { facingMode: { ideal: faceMode }, ...constraints[quality] },
-              audio: { echoCancellation: true, noiseSuppression: true }
+              audio: existingAudioTrack ? false : { echoCancellation: true, noiseSuppression: true }
           });
+
           const newVideoTrack = mediaStream.getVideoTracks()[0];
-          const newAudioTrack = mediaStream.getAudioTracks()[0];
+
           if (streamRef.current) {
+              // Quitamos el video viejo del stream principal y ponemos el nuevo
+              streamRef.current.getVideoTracks().forEach(t => streamRef.current?.removeTrack(t));
               streamRef.current.addTrack(newVideoTrack);
-              streamRef.current.getTracks().forEach(t => {
-                  if (t.kind === 'video' && t !== newVideoTrack) {
-                      streamRef.current?.removeTrack(t);
-                      t.stop();
+              
+              // 4. ACTUALIZACIÓN REMOTA (Padres): Reemplazamos solo la imagen
+              activeCallsRef.current.forEach(call => {
+                  const videoSender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
+                  if (videoSender) {
+                      videoSender.replaceTrack(newVideoTrack).catch(e => console.error("Error replace video:", e));
                   }
               });
           } else {
+              // Si es el primer arranque de la app
               streamRef.current = mediaStream;
           }
+
           setFacingMode(faceMode);
           setCurrentQuality(quality);
+
+          // 5. REFRESCAR EL VIDEO LOCAL (Bebé)
           if (localVideoRef.current) {
+              localVideoRef.current.srcObject = null;
               localVideoRef.current.srcObject = streamRef.current;
               localVideoRef.current.muted = true;
+              await localVideoRef.current.play().catch(e => console.error("Error play local:", e));
           }
+
+          // Notificamos el cambio a través del canal de datos
           activeDataConnsRef.current.forEach(conn => {
               if (conn.open) conn.send({ type: 'INFO_CAMERA_TYPE', value: faceMode });
           });
+
       } catch (error) {
-          console.error("Stream Error:", error);
-          if (faceMode === 'environment') startStream('user', quality);
+          console.error("Error en giro, recuperando...", error);
+          // Si algo falla, intentamos recuperar el video básico sin tocar el audio
+          try {
+              const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
+              const track = fallback.getVideoTracks()[0];
+              if (streamRef.current) {
+                  streamRef.current.addTrack(track);
+                  activeCallsRef.current.forEach(call => {
+                      const sender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
+                      if (sender) sender.replaceTrack(track);
+                  });
+              }
+          } catch (e) {}
       }
   };
 
@@ -205,33 +239,64 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   };
 
   const setupPeer = (token: string) => {
-    const numericId = Math.floor(100000 + Math.random() * 900000).toString();
+    const numericId = getPersistentNumericId();
     const peer = new Peer(numericId, { 
         config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
         debug: 1
     });
     peer.on('open', (id) => { setPeerId(id); setServerStatus('connected'); generateSecureQR(id, token); });
     peer.on('connection', (conn) => {
-        const incomingToken = (conn.metadata as any)?.token;
-        if (incomingToken !== token) {
-            conn.on('open', () => { conn.send({ type: 'ERROR_AUTH' }); setTimeout(() => conn.close(), 500); });
-            return;
-        }
+        // --- LÓGICA DE VINCULACIÓN MANUAL REPARADA ---
         conn.on('open', () => { 
             activeDataConnsRef.current.push(conn);
+            
             const parentName = (conn.metadata as any)?.name || 'Padre';
-            setConnectedPeers(prev => [...prev, { id: conn.peer, deviceId: (conn.metadata as any)?.deviceId, name: parentName, conn }]);
+            const parentDeviceId = (conn.metadata as any)?.deviceId;
+
+            // Guardamos al padre en el historial (lo que arreglamos hace un momento)
+            if (parentDeviceId) {
+                const now = Date.now();
+                const existingHistory = secureStorage.getItem<MonitorHistoryItem[]>('parent_history') || [];
+                const others = existingHistory.filter(h => h.id !== parentDeviceId);
+                const oldItem = existingHistory.find(h => h.id === parentDeviceId);
+                const updatedItem = {
+                    id: parentDeviceId,
+                    name: parentName,
+                    lastConnected: now,
+                    logs: [now, ...(oldItem?.logs || [])].slice(0, 50)
+                };
+                secureStorage.setItem('parent_history', [updatedItem, ...others].slice(0, 20));
+            }
+
+            // ENVIAMOS EL NOMBRE Y EL TOKEN PARA QUE EL PADRE TENGA LA LLAVE
+            conn.send({ 
+                type: 'INFO_DEVICE_NAME', 
+                name: getDeviceName(),
+                token: token // Enviamos el token real para que el padre lo guarde
+            });
+
+            setConnectedPeers(prev => {
+                if (prev.find(p => p.deviceId === parentDeviceId)) return prev;
+                return [...prev, { id: conn.peer, deviceId: parentDeviceId, name: parentName, conn }];
+            });
+
             if (peerRef.current && streamRef.current) {
                 const call = peerRef.current.call(conn.peer, streamRef.current);
                 activeCallsRef.current.push(call);
             }
         });
+
         conn.on('data', (data: any) => { 
             if (data?.type === 'CMD_FLASH') toggleFlash(data.value); 
             if (data?.type === 'CMD_LULLABY') toggleLullaby(data.value);
             if (data?.type === 'CMD_QUALITY') changeQuality(data.value);
             if (data?.type === 'CMD_CAMERA') changeCamera(data.value);
+            if (data?.type === 'CMD_WATCHDOG_REFRESH') {
+               console.log(">>> Watchdog: Reiniciando cámara por petición del receptor");
+               startStream(facingMode, currentQuality);
+            }
         });
+
         conn.on('close', () => { 
             activeDataConnsRef.current = activeDataConnsRef.current.filter(c => c !== conn); 
             setConnectedPeers(prev => prev.filter(p => p.conn !== conn)); 

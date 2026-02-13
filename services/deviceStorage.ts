@@ -88,3 +88,12 @@ export const initializeSmartName = async (): Promise<string | null> => {
 
     return null;
 };
+export const getPersistentNumericId = (): string => {
+  let id = localStorage.getItem('tino_numeric_id');
+  if (!id) {
+    // Genera el código de 6 dígitos una sola vez
+    id = Math.floor(100000 + Math.random() * 900000).toString();
+    localStorage.setItem('tino_numeric_id', id);
+  }
+  return id;
+};
