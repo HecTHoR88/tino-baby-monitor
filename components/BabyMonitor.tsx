@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Peer, MediaConnection, DataConnection } from 'peerjs';
 import QRCode from 'qrcode';
 import { analyzeBabyFrame } from '../services/geminiService';
-import { getDeviceId, getDeviceName } from '../services/deviceStorage';
+import { getDeviceId, getDeviceName, getPersistentNumericId, getCameraPreference, setCameraPreference } from '../services/deviceStorage';
 import { secureStorage } from '../services/secureStorage';
 import { MonitorHistoryItem, Language } from '../types';
 import { translations } from '../services/translations';
+
 // Agregamos la nueva función a la lista, manteniendo las anteriores
 import { getDeviceId, getDeviceName, getPersistentNumericId } from '../services/deviceStorage';
 interface BabyMonitorProps {
@@ -30,6 +31,7 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   
   const [isNightVision, setIsNightVision] = useState(false);
   const [isLullabyOn, setIsLullabyOn] = useState(false);
+  const [lullabyMode, setLullabyMode] = useState<number>(0); // 0: off, 1: Lluvia, 2: Corazón, 3: Ondas
   const [isReceivingVoice, setIsReceivingVoice] = useState(false); 
   
   // Lógica Dinámica de QR e ID
@@ -121,10 +123,16 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     }
     setConnectionToken(token);
 
-    const initializeMonitor = async () => {
+  const initializeMonitor = async () => {
       try {
         setServerStatus('connecting');
-        await startStream('environment', 'medium');
+        
+        // LEEMOS LA PREFERENCIA GUARDADA
+        const savedCamera = getCameraPreference();
+        
+        // INICIAMOS CON LA CÁMARA QUE EL USUARIO PREFIRIÓ LA ÚLTIMA VEZ
+        await startStream(savedCamera, 'medium');
+        
         setupPeer(token!);
         setupBattery();
         startAIAnalysisLoop(); 
@@ -147,24 +155,32 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     };
   }, []);
 
- const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | 'medium' | 'low') => {
-      // 1. PROTECCIÓN DE AUDIO: Guardamos la pista del micrófono si ya existe
+const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | 'medium' | 'low') => {
       const existingAudioTrack = streamRef.current?.getAudioTracks()[0];
-
-      // 2. LIMPIEZA PARCIAL: Detenemos ÚNICAMENTE las pistas de video
       if (streamRef.current) {
           streamRef.current.getVideoTracks().forEach(t => t.stop());
       }
 
+      // AJUSTE PRO: Ponemos mínimos para forzar la lente principal
       const constraints = {
-          high: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 20 } },
-          medium: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 15 } },
-          low: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 10 } }
+          high: { 
+              width: { min: 1280, ideal: 1920 }, 
+              height: { min: 720, ideal: 1080 }, 
+              frameRate: { ideal: 20 } 
+          },
+          medium: { 
+              width: { min: 1280, ideal: 1280 }, 
+              height: { min: 720, ideal: 720 }, 
+              frameRate: { ideal: 15 } 
+          },
+          low: { 
+              width: { ideal: 640 }, 
+              height: { ideal: 480 }, 
+              frameRate: { ideal: 10 } 
+          }
       };
 
       try {
-          // 3. PEDIMOS EL NUEVO VIDEO
-          // Si ya tenemos audio vivo, no pedimos uno nuevo (audio: false) para no cortar la señal
           const mediaStream = await navigator.mediaDevices.getUserMedia({
               video: { facingMode: { ideal: faceMode }, ...constraints[quality] },
               audio: existingAudioTrack ? false : { echoCancellation: true, noiseSuppression: true }
@@ -173,52 +189,36 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
           const newVideoTrack = mediaStream.getVideoTracks()[0];
 
           if (streamRef.current) {
-              // Quitamos el video viejo del stream principal y ponemos el nuevo
               streamRef.current.getVideoTracks().forEach(t => streamRef.current?.removeTrack(t));
               streamRef.current.addTrack(newVideoTrack);
-              
-              // 4. ACTUALIZACIÓN REMOTA (Padres): Reemplazamos solo la imagen
               activeCallsRef.current.forEach(call => {
                   const videoSender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
-                  if (videoSender) {
-                      videoSender.replaceTrack(newVideoTrack).catch(e => console.error("Error replace video:", e));
-                  }
+                  if (videoSender) videoSender.replaceTrack(newVideoTrack).catch(e => console.error(e));
               });
           } else {
-              // Si es el primer arranque de la app
               streamRef.current = mediaStream;
           }
 
           setFacingMode(faceMode);
           setCurrentQuality(quality);
 
-          // 5. REFRESCAR EL VIDEO LOCAL (Bebé)
           if (localVideoRef.current) {
               localVideoRef.current.srcObject = null;
               localVideoRef.current.srcObject = streamRef.current;
               localVideoRef.current.muted = true;
-              await localVideoRef.current.play().catch(e => console.error("Error play local:", e));
+              await localVideoRef.current.play().catch(() => {});
           }
 
-          // Notificamos el cambio a través del canal de datos
           activeDataConnsRef.current.forEach(conn => {
               if (conn.open) conn.send({ type: 'INFO_CAMERA_TYPE', value: faceMode });
           });
 
       } catch (error) {
-          console.error("Error en giro, recuperando...", error);
-          // Si algo falla, intentamos recuperar el video básico sin tocar el audio
-          try {
-              const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
-              const track = fallback.getVideoTracks()[0];
-              if (streamRef.current) {
-                  streamRef.current.addTrack(track);
-                  activeCallsRef.current.forEach(call => {
-                      const sender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
-                      if (sender) sender.replaceTrack(track);
-                  });
-              }
-          } catch (e) {}
+          console.error("Error en lentes, reintentando modo compatible...", error);
+          // Si los mínimos fallan, reintentamos sin mínimos (modo seguro)
+          const fallback = await navigator.mediaDevices.getUserMedia({ video: { facingMode: faceMode } });
+          streamRef.current = fallback;
+          if (localVideoRef.current) localVideoRef.current.srcObject = fallback;
       }
   };
 
@@ -231,7 +231,11 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     } catch (e) { console.warn("Flash no disponible"); }
   };
 
-  const changeCamera = (mode: 'user' | 'environment') => startStream(mode, currentQuality);
+  const changeCamera = (mode: 'user' | 'environment') => {
+      // ANOTAMOS EN EL BAÚL LA NUEVA PREFERENCIA
+      setCameraPreference(mode);
+      startStream(mode, currentQuality);
+  };
   const changeQuality = (newQuality: 'high' | 'medium' | 'low') => startStream(facingMode, newQuality);
   const toggleMic = (enabled: boolean) => {
       setMicEnabled(enabled);
@@ -288,13 +292,19 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
 
         conn.on('data', (data: any) => { 
             if (data?.type === 'CMD_FLASH') toggleFlash(data.value); 
-            if (data?.type === 'CMD_LULLABY') toggleLullaby(data.value);
+            if (data?.type === 'CMD_LULLABY') toggleLullaby(Number(data.value));
             if (data?.type === 'CMD_QUALITY') changeQuality(data.value);
             if (data?.type === 'CMD_CAMERA') changeCamera(data.value);
             if (data?.type === 'CMD_WATCHDOG_REFRESH') {
-               console.log(">>> Watchdog: Reiniciando cámara por petición del receptor");
-               startStream(facingMode, currentQuality);
-            }
+            // REGLA DE ORO: En lugar de confiar en la memoria 'suelta', 
+            // leemos directamente la preferencia real guardada en el baúl.
+            const currentActualCamera = getCameraPreference();
+            
+            console.log(">>> Watchdog: Refrescando con la cámara real guardada:", currentActualCamera);
+            
+            // Forzamos el inicio con la cámara correcta
+            startStream(currentActualCamera, currentQuality);
+        }
         });
 
         conn.on('close', () => { 
@@ -320,38 +330,91 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
       try { setQrCodeUrl(await QRCode.toDataURL(JSON.stringify({ id, token }), { margin: 2, width: 300 })); } catch (e) {} 
   };
 
-  const toggleLullaby = (enable: boolean) => {
-    setIsLullabyOn(enable);
-    if (enable) {
-        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const ctx = audioCtxRef.current;
-        const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        let lastOut = 0.0;
-        for (let i = 0; i < buffer.length; i++) {
-            let white = Math.random() * 2 - 1;
-            lastOut = (lastOut + (0.02 * white)) / 1.02;
-            data[i] = lastOut * 3.5;
-        }
-        const noise = ctx.createBufferSource();
-        noise.buffer = buffer; noise.loop = true;
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass'; filter.frequency.value = 450;
-        const gain = ctx.createGain();
-        gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 2);
-        noise.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-        noise.start();
-        lullabySourceRef.current = noise; lullabyGainRef.current = gain;
-    } else { stopLullaby(); }
-  };
-
+ 
   const stopLullaby = () => {
-      if (lullabySourceRef.current && lullabyGainRef.current) {
-          lullabyGainRef.current.gain.linearRampToValueAtTime(0, audioCtxRef.current!.currentTime + 1);
-          setTimeout(() => { try{lullabySourceRef.current?.stop();}catch(e){} }, 1000);
-          lullabySourceRef.current = null; lullabyGainRef.current = null;
+      if (lullabySourceRef.current) {
+          try {
+              lullabySourceRef.current.stop();
+              lullabySourceRef.current.disconnect();
+          } catch (e) {}
+          lullabySourceRef.current = null;
+      }
+      if (lullabyGainRef.current) {
+          lullabyGainRef.current.disconnect();
+          lullabyGainRef.current = null;
+      }
+      // Cerramos el contexto para liberar el hardware de sonido por completo
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+          audioCtxRef.current.close().catch(() => {});
+          audioCtxRef.current = null;
       }
       setIsLullabyOn(false);
+  };
+
+const toggleLullaby = (mode: number) => {
+    // Si el modo es 0 o el mismo que ya suena, apagamos
+    if (mode === 0) {
+        stopLullaby();
+        setLullabyMode(0);
+        return;
+    }
+
+    // Limpieza previa si ya estaba sonando una
+    if (lullabySourceRef.current) stopLullaby();
+
+    setLullabyMode(mode);
+    setIsLullabyOn(true);
+
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    
+    const ctx = audioCtxRef.current;
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+    
+    // Configuración inicial del volumen (SILENCIO TOTAL para empezar el Fade-in)
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    
+    if (mode === 1) { // MODO 1: LLUVIA / RUIDO BLANCO SUAVE
+        const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < buffer.length; i++) { data[i] = Math.random() * 2 - 1; }
+        const source = ctx.createBufferSource();
+        source.buffer = buffer; source.loop = true;
+        filter.type = 'lowpass'; filter.frequency.value = 400; // Sonido más cálido
+        source.connect(filter); filter.connect(gain);
+        source.start();
+        lullabySourceRef.current = source;
+    } 
+    else if (mode === 2) { // MODO 2: LATIDO DE CORAZÓN
+        const osc = ctx.createOscillator();
+        const thump = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = 50; // Frecuencia muy baja
+        // Lógica de pulso (Latido doble: Tum-tum... Tum-tum)
+        const lfo = ctx.createOscillator();
+        lfo.type = 'square'; lfo.frequency.value = 1.2; // Ritmo cardíaco
+        lfo.connect(thump.gain); osc.connect(thump); thump.connect(gain);
+        osc.start(); lfo.start();
+        lullabySourceRef.current = osc;
+    }
+    else if (mode === 3) { // MODO 3: ONDAS RELAJANTES
+        const osc = ctx.createOscillator();
+        osc.type = 'sine'; osc.frequency.value = 150;
+        const vca = ctx.createGain();
+        // LFO para simular el vaivén del mar
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine'; lfo.frequency.value = 0.2; // Movimiento lento
+        lfo.connect(vca.gain); osc.connect(vca); vca.connect(gain);
+        osc.start(); lfo.start();
+        lullabySourceRef.current = osc;
+    }
+
+    gain.connect(ctx.destination);
+    lullabyGainRef.current = gain;
+
+    // FADE-IN PROFESIONAL: Sube de 0 a 0.08 (volumen medio) en 4 segundos
+    gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 4);
   };
 
   const setupBattery = async () => {
@@ -444,11 +507,11 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
                         IA
                     </div>
                     {isLullabyOn && (
-                        <div className="bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-xl text-indigo-500 text-[9px] font-black animate-pulse shadow-sm flex items-center gap-1.5 w-max border border-white/20">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
-                            NANAS
-                        </div>
-                    )}
+    <div className="bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-xl text-indigo-500 text-[9px] font-black animate-pulse shadow-sm flex items-center gap-1.5 w-max border border-white/20 uppercase">
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
+        {lullabyMode === 1 ? 'LLUVIA' : lullabyMode === 2 ? 'CORAZÓN' : 'ONDAS'}
+    </div>
+)}
                     <div className="bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-xl text-slate-600 text-[9px] font-black shadow-sm flex items-center gap-1.5 uppercase w-max border border-white/20">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                         {currentQuality.toUpperCase()}

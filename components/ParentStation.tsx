@@ -5,6 +5,9 @@ import { MonitorHistoryItem, Language } from '../types';
 import { getDeviceName, getDeviceId } from '../services/deviceStorage';
 import { secureStorage } from '../services/secureStorage';
 import { translations } from '../services/translations';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Toast } from '@capacitor/toast';
+
 const V85_GRADIENT = { background: 'linear-gradient(180deg, #bae6fd 0%, #fce7f3 100%)' };
 
 interface ParentStationProps { 
@@ -20,12 +23,14 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [isScanning, setIsScanning] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('');
+  const [isFlashing, setIsFlashing] = useState(false);
   
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
   const [nightVision, setNightVision] = useState(false);
   const [isNightVision, setIsNightVision] = useState(false); // Filtro digital local
-  const [lullaby, setLullaby] = useState(false);
+  const [lullaby, setLullaby] = useState(false); // Mantener para evitar errores de referencia
+  const [lullabyMode, setLullabyMode] = useState(0); // La nueva para los 3 sonidos
   const [remoteFacingMode, setRemoteFacingMode] = useState<'user' | 'environment'>('environment');
   
   const [showQualityMenu, setShowQualityMenu] = useState(false);
@@ -36,6 +41,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState(false);
   const [showLowBatteryWarning, setShowLowBatteryWarning] = useState(false);
+
 
   // Monitor de Red
   const [isNetworkUnstable, setIsNetworkUnstable] = useState(false);
@@ -206,32 +212,35 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       }
   };
   
-  // REGLA DE ORO: Audio instantáneo activando/desactivando track
   const toggleTalk = async (talking: boolean) => { 
       setIsTalking(talking); 
       if (talking) {
           try {
-              if (!localStreamRef.current) {
-                  await preWarmMicrophone();
-              }
-              if (localStreamRef.current) {
-                  localStreamRef.current.getAudioTracks().forEach(track => track.enabled = true);
-                  
-                  if (!talkCallRef.current && peerRef.current && connectionId) {
-                      const call = peerRef.current.call(connectionId, localStreamRef.current);
-                      talkCallRef.current = call;
+              // Pedimos el micro solo cuando vamos a hablar (para evitar acoples)
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              localStreamRef.current = stream;
+              const audioTrack = stream.getAudioTracks()[0];
+              
+              if (peerRef.current && connectionId) {
+                  // Si no hay llamada activa, la creamos
+                  if (!talkCallRef.current) {
+                      talkCallRef.current = peerRef.current.call(connectionId, stream);
+                  } else {
+                      // Si ya existe, reemplazamos el track por el nuevo activo
+                      const sender = talkCallRef.current.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
+                      if (sender) sender.replaceTrack(audioTrack);
                   }
               }
           } catch (e) {
-              console.error("No se pudo iniciar Talk:", e);
+              console.error("Error micrófono:", e);
               setIsTalking(false);
           }
       } else {
+          // DETECCIÓN DE ACOPLE: Apagamos el micro físicamente al soltar
           if (localStreamRef.current) {
-              localStreamRef.current.getAudioTracks().forEach(track => track.enabled = false);
+              localStreamRef.current.getTracks().forEach(track => track.stop());
+              localStreamRef.current = null;
           }
-          // No cerramos la llamada para mantener la conexión "caliente" y re-utilizarla si es posible
-          // O la cerramos si el protocolo lo requiere, pero el track ya estará listo.
           if (talkCallRef.current) {
               talkCallRef.current.close();
               talkCallRef.current = null;
@@ -239,14 +248,16 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       }
   };
 
-  const sendCommand = (type: 'CMD_FLASH' | 'CMD_LULLABY' | 'CMD_CAMERA' | 'CMD_SENSITIVITY', value: any) => { 
+  const sendCommand = (type: string, value: any) => { 
       if (dataConnRef.current?.open) { 
           dataConnRef.current.send({ type, value }); 
-          if (type === 'CMD_FLASH') {
-              setNightVision(value); 
-              setIsNightVision(value); // Sincronizamos filtro digital con flash remoto
+          
+          // Sincronizamos los estados locales para que la interfaz cambie
+          if (type === 'CMD_FLASH') setNightVision(value); 
+          if (type === 'CMD_LULLABY') {
+              setLullaby(value > 0); // Si es modo 1, 2 o 3, lullaby es true
+              setLullabyMode(Number(value));
           }
-          if (type === 'CMD_LULLABY') setLullaby(value); 
           if (type === 'CMD_SENSITIVITY') setSensitivity(value);
       } 
   };
@@ -260,21 +271,45 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       }
   };
 
-  const takeSnapshot = () => {
+  const takeSnapshot = async () => {
       if (!videoRef.current) return;
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(videoRef.current, 0, 0);
-          const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.download = `TiNO_Snapshot_${new Date().getTime()}.png`;
-          link.href = dataUrl;
-          link.click();
+      
+      try {
+          // 1. Efecto visual de Flash (la pantalla parpadea en blanco)
+          setIsFlashing(true);
+          setTimeout(() => setIsFlashing(false), 100);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = videoRef.current.videoWidth;
+          canvas.height = videoRef.current.videoHeight;
+          const ctx = canvas.getContext('2d');
+          
+          if (ctx) {
+              // Dibujamos el frame
+              ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/png');
+              
+              // 2. Guardar de forma nativa en la carpeta de Imágenes
+              const fileName = `TiNO_Baby_${new Date().getTime()}.png`;
+              
+              await Filesystem.writeFile({
+                  path: `Pictures/TiNO/${fileName}`, // Crea carpeta TiNO dentro de Imágenes
+                  data: dataUrl,
+                  directory: Directory.ExternalStorage,
+                  recursive: true // Esto crea la carpeta TiNO si no existe
+              });
+
+              // 3. Aviso al usuario
+              await Toast.show({
+                  text: 'Captura guardada en Galería',
+                  duration: 'short',
+                  position: 'center'
+              });
+          }
+      } catch (e: any) {
+          console.error("Error al guardar:", e);
+          // Fallback si falla el acceso a carpetas específicas
+          alert("La foto se tomó, pero revisa los permisos de almacenamiento.");
       }
   };
 
@@ -341,8 +376,13 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       rafRef.current = requestAnimationFrame(scanTick); 
   };
 
-  const handleZoom = (delta: number) => {
-      setZoomLevel(prev => Math.min(Math.max(prev + delta, 1), 3));
+ const cycleZoom = () => {
+    setZoomLevel(prev => {
+      if (prev === 1) return 1.5;
+      if (prev === 1.5) return 2;
+      if (prev === 2) return 3;
+      return 1; // Vuelve al inicio
+    });
   };
 
   if (!isConnected) return (
@@ -476,36 +516,37 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
           
           {/* VISTA DEL VIDEO (SUPERIOR) */}
           <div className="flex-1 relative bg-slate-900 rounded-b-[2.5rem] overflow-hidden shadow-2xl z-10">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                muted 
-                className="w-full h-full object-contain transition-all duration-300 ease-out" 
-                style={{ 
-                  transform: `scale(${zoomLevel}) scaleX(-1)`,
-                  filter: isNightVision ? 'brightness(1.5) contrast(1.2) saturate(0.8)' : 'none'
-                }} 
-              />
+                <video 
+      ref={videoRef} 
+      autoPlay 
+      playsInline 
+      muted 
+      className="w-full h-full object-contain transition-all duration-300 ease-out" 
+      style={{ 
+        transform: `scale(${zoomLevel}) scaleX(-1)`,
+        filter: isNightVision ? 'brightness(1.5) contrast(1.2) saturate(0.8)' : 'none'
+      }} 
+    />
 
+    {/* EFECTO DE FLASH VISUAL (EL QUE ME PREGUNTASTE) */}
+    {isFlashing && (
+        <div className="absolute inset-0 bg-white z-[100] animate-pulse"></div>
+    )}
               {/* CABECERA PRO: INDICADORES COMPACTOS Y BOTÓN X */}
               <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-start">
                   
                   {/* GRUPO IZQUIERDO: ESTADOS */}
                   <div className="flex gap-1.5 flex-wrap max-w-[75%]">
-                      {/* VIVO */}
                       <div className="bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 shadow-lg">
                           <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isNetworkUnstable ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
                           <span className="text-white text-[9px] font-black tracking-widest uppercase">{t.live_badge}</span>
                       </div>
 
-                      {/* CALIDAD */}
                       <button onClick={() => setShowQualityMenu(!showQualityMenu)} className="bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 shadow-lg active:scale-95 transition-all">
                           <svg className="w-3 h-3 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                           <span className="text-white text-[9px] font-black uppercase">{videoQuality}</span>
                       </button>
 
-                      {/* SENSIBILIDAD */}
                       <button onClick={() => {
                           const next = sensitivity === 'low' ? 'medium' : sensitivity === 'medium' ? 'high' : 'low';
                           sendCommand('CMD_SENSITIVITY', next);
@@ -514,12 +555,13 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                           <span className="text-white text-[9px] font-black uppercase">{t[`sens_${sensitivity.substring(0,3)}` as any] || sensitivity}</span>
                       </button>
 
-                      {/* REFRESCAR (SOLO ICONO) */}
                       <button 
                           onClick={() => {
-                              sendCommand('CMD_WATCHDOG_REFRESH', true);
-                              setConnectionStatus("..."); 
-                              setTimeout(() => setConnectionStatus(""), 2000);
+                              if (dataConnRef.current?.open) {
+                                  dataConnRef.current.send({ type: 'CMD_WATCHDOG_REFRESH', value: true });
+                                  setConnectionStatus("..."); 
+                                  setTimeout(() => setConnectionStatus(""), 2000);
+                              }
                           }}
                           className="bg-black/40 backdrop-blur-md w-7 h-7 rounded-lg flex items-center justify-center border border-white/10 shadow-lg active:scale-90 transition-all text-white"
                       >
@@ -527,7 +569,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                       </button>
                   </div>
 
-                  {/* BOTÓN X PARA CERRAR */}
                   <button 
                       onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} 
                       className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all shadow-xl"
@@ -536,7 +577,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                   </button>
               </div>
 
-              {/* AVISO DE RED INESTABLE */}
               {isNetworkUnstable && (
                 <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] animate-fade-in">
                     <div className="bg-amber-500/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/20 flex items-center gap-2">
@@ -545,7 +585,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                 </div>
               )}
 
-              {/* MENÚ DE CALIDAD FLOTANTE */}
               {showQualityMenu && (
                   <div className="absolute top-14 left-10 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl flex flex-col w-28 overflow-hidden z-50 border border-slate-100">
                       {['high', 'medium', 'low'].map((q: any) => (
@@ -554,7 +593,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                   </div>
               )}
               
-              {/* BATERÍA REMOTA */}
               {batteryLevel !== null && (
                   <div className={`absolute bottom-6 right-6 bg-black/40 backdrop-blur px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 ${showLowBatteryWarning ? 'bg-rose-500 animate-pulse' : ''}`}>
                       <span className="text-white text-[9px] font-black">{Math.round(batteryLevel * 100)}%</span>
@@ -575,14 +613,18 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
           
           {/* PANEL DE CONTROLES (INFERIOR) */}
           <div className="bg-slate-50 p-6 pb-12" style={V85_GRADIENT}>
+              
+              {/* NUEVO SISTEMA DE ZOOM POR CICLOS */}
               <div className="flex justify-center items-center mb-6">
-                 <div className="flex items-center gap-4 bg-white/70 backdrop-blur-xl px-4 py-2 rounded-full shadow-sm border border-white">
-                      <button onClick={() => handleZoom(-0.5)} className="text-slate-400 font-black px-2 text-xl">-</button>
-                      <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${((zoomLevel - 1) / 2) * 100}%` }}></div>
-                      </div>
-                      <button onClick={() => handleZoom(0.5)} className="text-slate-400 font-black px-2 text-xl">+</button>
-                 </div>
+                <button 
+                    onClick={cycleZoom}
+                    className="bg-white/70 backdrop-blur-xl border border-white px-6 py-2 rounded-full shadow-lg flex items-center gap-3 active:scale-95 transition-all"
+                >
+                    <span className="text-indigo-600 font-black text-[10px] uppercase tracking-widest">Zoom</span>
+                    <div className="bg-indigo-600 text-white text-[10px] font-black px-3 py-0.5 rounded-full">
+                        {zoomLevel}x
+                    </div>
+                </button>
               </div>
 
               <div className="grid grid-cols-4 gap-4">
@@ -591,11 +633,22 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                     <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
                     <span className="text-[9px] font-black uppercase">{t.talk_btn}</span>
                   </button>
-                  {/* NANAS */}
-                  <button onClick={() => sendCommand('CMD_LULLABY', !lullaby)} className={`aspect-square rounded-[2rem] flex flex-col items-center justify-center gap-2 border border-white shadow-xl transition-all ${lullaby ? 'bg-purple-500 text-white' : 'bg-white/70 backdrop-blur-xl text-purple-500'}`}>
-                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l.31-.088a2.25 2.25 0 001.382-1.353V9m0 0V5.25A2.25 2.25 0 0016.5 3h-2.25a2.25 2.25 0 00-2.25 2.25V15m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l.31-.088A2.25 2.25 0 009 15.503V9z" /></svg>
-                    <span className="text-[9px] font-black uppercase">NANAS</span>
-                  </button>
+                {/* BOTÓN DE NANAS PREMIUM */}
+<button 
+  onClick={() => {
+    const nextMode = (lullabyMode + 1) % 4; 
+    // Llamamos a la función que actualiza todo
+    sendCommand('CMD_LULLABY', nextMode);
+  }} 
+  className={`aspect-square rounded-[2rem] flex flex-col items-center justify-center gap-2 border border-white shadow-xl transition-all ${lullabyMode > 0 ? 'bg-purple-500 text-white scale-95' : 'bg-white/70 backdrop-blur-xl text-purple-500'}`}
+>
+  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+    <path d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l.31-.088a2.25 2.25 0 001.382-1.353V9m0 0V5.25A2.25 2.25 0 0016.5 3h-2.25a2.25 2.25 0 00-2.25 2.25V15m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l.31-.088A2.25 2.25 0 009 15.503V9z" />
+  </svg>
+  <span className="text-[9px] font-black uppercase">
+    {lullabyMode === 0 ? 'NANAS' : lullabyMode === 1 ? 'LLUVIA' : lullabyMode === 2 ? 'CORAZÓN' : 'ONDAS'}
+  </span>
+</button>
                   {/* MODO NOCHE */}
                   <button onClick={() => setIsNightVision(!isNightVision)} className={`aspect-square rounded-[2rem] flex flex-col items-center justify-center gap-2 border border-white shadow-xl transition-all ${isNightVision ? 'bg-amber-500 text-white' : 'bg-white/70 backdrop-blur-xl text-amber-500'}`}>
                     <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" /></svg>

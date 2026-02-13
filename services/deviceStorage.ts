@@ -97,3 +97,10 @@ export const getPersistentNumericId = (): string => {
   }
   return id;
 };
+export const getCameraPreference = (): 'user' | 'environment' => {
+  return secureStorage.getItem<'user' | 'environment'>('tino_camera_pref') || 'environment';
+};
+
+export const setCameraPreference = (pref: 'user' | 'environment') => {
+  secureStorage.setItem('tino_camera_pref', pref);
+};
