@@ -207,7 +207,7 @@ const App: React.FC = () => {
           </div>
         )}
        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">
-         TiNO v1.6.3 - Advanced Audio & Native Snapshots
+         TiNO v1.7.0 - UI Symmetry & Audio Fix
        </p>
       </div>
     </div>

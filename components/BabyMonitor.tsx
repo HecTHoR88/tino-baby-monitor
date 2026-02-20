@@ -236,7 +236,11 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
       setCameraPreference(mode);
       startStream(mode, currentQuality);
   };
-  const changeQuality = (newQuality: 'high' | 'medium' | 'low') => startStream(facingMode, newQuality);
+  // REGLA DE ORO: Usamos la preferencia real guardada para que al cambiar calidad no se resetee la lente
+  const changeQuality = (newQuality: 'high' | 'medium' | 'low') => {
+      const currentActualCamera = getCameraPreference(); 
+      startStream(currentActualCamera, newQuality);
+  };
   const toggleMic = (enabled: boolean) => {
       setMicEnabled(enabled);
       if (streamRef.current) streamRef.current.getAudioTracks().forEach(t => t.enabled = enabled);

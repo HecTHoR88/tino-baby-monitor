@@ -41,7 +41,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState(false);
   const [showLowBatteryWarning, setShowLowBatteryWarning] = useState(false);
-
+  const [showSettings, setShowSettings] = useState(false);
 
   // Monitor de Red
   const [isNetworkUnstable, setIsNetworkUnstable] = useState(false);
@@ -512,103 +512,101 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   );
 
   return (
-      <div className="flex flex-col h-full bg-slate-900 overflow-hidden font-sans">
+     <div className="flex flex-col h-full bg-slate-50 overflow-hidden font-sans relative">
           
-          {/* VISTA DEL VIDEO (SUPERIOR) */}
-          <div className="flex-1 relative bg-slate-900 rounded-b-[2.5rem] overflow-hidden shadow-2xl z-10">
-                <video 
-      ref={videoRef} 
-      autoPlay 
-      playsInline 
-      muted 
-      className="w-full h-full object-contain transition-all duration-300 ease-out" 
-      style={{ 
-        transform: `scale(${zoomLevel}) scaleX(-1)`,
-        filter: isNightVision ? 'brightness(1.5) contrast(1.2) saturate(0.8)' : 'none'
-      }} 
-    />
-
-    {/* EFECTO DE FLASH VISUAL (EL QUE ME PREGUNTASTE) */}
-    {isFlashing && (
-        <div className="absolute inset-0 bg-white z-[100] animate-pulse"></div>
-    )}
-              {/* CABECERA PRO: INDICADORES COMPACTOS Y BOTÓN X */}
-              <div className="absolute top-4 left-4 right-4 z-50 flex justify-between items-start">
-                  
-                  {/* GRUPO IZQUIERDO: ESTADOS */}
-                  <div className="flex gap-1.5 flex-wrap max-w-[75%]">
-                      <div className="bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 shadow-lg">
-                          <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isNetworkUnstable ? 'bg-amber-400' : 'bg-emerald-400'}`}></div>
-                          <span className="text-white text-[9px] font-black tracking-widest uppercase">{t.live_badge}</span>
-                      </div>
-
-                      <button onClick={() => setShowQualityMenu(!showQualityMenu)} className="bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 shadow-lg active:scale-95 transition-all">
-                          <svg className="w-3 h-3 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                          <span className="text-white text-[9px] font-black uppercase">{videoQuality}</span>
-                      </button>
-
-                      <button onClick={() => {
-                          const next = sensitivity === 'low' ? 'medium' : sensitivity === 'medium' ? 'high' : 'low';
-                          sendCommand('CMD_SENSITIVITY', next);
-                      }} className="bg-black/40 backdrop-blur-md px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 shadow-lg active:scale-95 transition-all">
-                          <svg className="w-3 h-3 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                          <span className="text-white text-[9px] font-black uppercase">{t[`sens_${sensitivity.substring(0,3)}` as any] || sensitivity}</span>
-                      </button>
-
-                      <button 
-                          onClick={() => {
-                              if (dataConnRef.current?.open) {
-                                  dataConnRef.current.send({ type: 'CMD_WATCHDOG_REFRESH', value: true });
-                                  setConnectionStatus("..."); 
-                                  setTimeout(() => setConnectionStatus(""), 2000);
-                              }
-                          }}
-                          className="bg-black/40 backdrop-blur-md w-7 h-7 rounded-lg flex items-center justify-center border border-white/10 shadow-lg active:scale-90 transition-all text-white"
-                      >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                      </button>
+          {/* SECCIÓN 1: HEADER SUPERIOR FLOTANTE 
+              Subido más cerca del borde (mt-1) y con sombra suave. */}
+          <div className="absolute top-0 left-0 right-0 z-[60] pt-safe mt-1 px-4 flex justify-between items-center h-14 bg-transparent">
+              <div className="flex gap-2 items-center">
+                  <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg border border-white/50">
+                      <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
+                      <span className="text-slate-600 text-[9px] font-black uppercase tracking-wide">{t.live_badge}</span>
                   </div>
 
                   <button 
-                      onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} 
-                      className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all shadow-xl"
+                      onClick={() => {
+                          if (dataConnRef.current?.open) {
+                              dataConnRef.current.send({ type: 'CMD_WATCHDOG_REFRESH', value: true });
+                              setConnectionStatus("..."); 
+                              setTimeout(() => setConnectionStatus(""), 2000);
+                          }
+                      }}
+                      className="bg-white/90 backdrop-blur-md w-10 h-10 rounded-full flex items-center justify-center text-slate-400 shadow-lg border border-white/50 active:scale-90 transition-all"
                   >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                   </button>
               </div>
 
-              {isNetworkUnstable && (
-                <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[100] animate-fade-in">
-                    <div className="bg-amber-500/90 backdrop-blur-md px-4 py-2 rounded-2xl shadow-lg border border-white/20 flex items-center gap-2">
-                        <span className="text-white text-[10px] font-black uppercase tracking-widest">⚠️ Red Inestable</span>
+              <div className="flex gap-2 items-center">
+                  <button onClick={() => setShowSettings(true)} className="bg-white shadow-xl w-10 h-10 rounded-full flex items-center justify-center text-slate-700 active:scale-90 transition-all border border-white/50">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  </button>
+                  <button onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} className="bg-white shadow-xl w-10 h-10 rounded-full flex items-center justify-center text-rose-500 active:scale-90 transition-all border border-white/50">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+              </div>
+          </div>
+
+          {/* SECCIÓN 2: VISOR DE VIDEO EXPANDIDO
+              px-1 para márgenes laterales mínimos. h-[62vh] para que toque el panel inferior pero sea responsivo. */}
+          <div className="flex-none w-full px-1 pt-16">
+              <div className={`w-full h-[62vh] rounded-2xl overflow-hidden relative shadow-2xl border-[3px] transition-all duration-700 ${isConnected ? 'border-emerald-400' : 'border-white'} bg-slate-900`}>
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted 
+                  className="w-full h-full object-cover transition-all duration-300" 
+                  style={{ 
+                    transform: `scale(${zoomLevel}) scaleX(-1)`,
+                    filter: isNightVision ? 'brightness(1.5) contrast(1.2) saturate(0.8)' : 'none'
+                  }} 
+                />
+
+                {/* EFECTO DE FLASH VISUAL (REINCORPORADO) */}
+                {isFlashing && (
+                    <div className="absolute inset-0 bg-white z-[100] animate-pulse"></div>
+                )}
+
+                {/* ETIQUETAS INTERNAS CON ICONOS DEL BEBÉ (TRASLÚCIDAS) */}
+                <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-30">
+                    {/* IA con el RAYO exacto del modo bebé */}
+                    <div className="bg-white/40 backdrop-blur-md px-3 py-1.5 rounded-xl text-indigo-700 text-[8px] font-black shadow-sm flex items-center gap-1.5 w-max border border-white/20">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        IA: {sensitivity.toUpperCase()}
+                    </div>
+                    {/* Calidad con icono CÁMARA */}
+                    <div className="bg-white/40 backdrop-blur-md px-3 py-1.5 rounded-xl text-slate-800 text-[8px] font-black shadow-sm flex items-center gap-1.5 uppercase w-max border border-white/20">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        {videoQuality.toUpperCase()}
                     </div>
                 </div>
-              )}
 
-              {showQualityMenu && (
-                  <div className="absolute top-14 left-10 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl flex flex-col w-28 overflow-hidden z-50 border border-slate-100">
-                      {['high', 'medium', 'low'].map((q: any) => (
-                          <button key={q} onClick={() => changeQuality(q)} className={`px-4 py-2.5 text-left text-[10px] font-black ${videoQuality === q ? 'text-indigo-600 bg-indigo-50' : 'text-slate-600'}`}>{q.toUpperCase()}</button>
-                      ))}
-                  </div>
-              )}
-              
-              {batteryLevel !== null && (
-                  <div className={`absolute bottom-6 right-6 bg-black/40 backdrop-blur px-2 py-1 rounded-lg flex items-center gap-1.5 border border-white/10 ${showLowBatteryWarning ? 'bg-rose-500 animate-pulse' : ''}`}>
-                      <span className="text-white text-[9px] font-black">{Math.round(batteryLevel * 100)}%</span>
-                      <div className="w-5 h-2.5 border border-white/50 rounded-[2px] p-[1px] relative">
-                          <div className={`h-full rounded-px ${batteryLevel <= 0.2 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{width: `${batteryLevel * 100}%` }} />
-                      </div>
-                  </div>
-              )}
+                {/* BATERÍA BEBÉ CON ESTILO GLASS */}
+                {batteryLevel !== null && (
+                    <div className="absolute bottom-6 right-6 bg-white/40 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/20 shadow-sm">
+                        <span className="text-slate-800 text-[10px] font-black">{Math.round(batteryLevel * 100)}%</span>
+                        <div className="w-6 h-3 border border-slate-600 rounded-[3px] p-[1.5px] relative">
+                            <div className={`h-full rounded-sm ${batteryLevel <= 0.2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{width: `${batteryLevel * 100}%` }} />
+                            {isCharging && <span className="absolute -right-3 -top-1.5 text-[8px] animate-pulse text-emerald-600">⚡</span>}
+                        </div>
+                    </div>
+                )}
 
-              {!audioEnabled && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm z-30">
-                      <button onClick={enableAudio} className="bg-white px-8 py-4 rounded-full flex items-center gap-3 shadow-2xl animate-bounce">
-                          <span className="text-xl">🔇</span><span className="text-slate-800 font-bold text-sm uppercase tracking-tight">{t.activate_sound}</span>
-                      </button>
-                  </div>
-              )}
+                {/* ACTIVADOR DE AUDIO FLOTANTE */}
+                {!audioEnabled && isConnected && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/10 backdrop-blur-sm z-30">
+                        <button onClick={enableAudio} className="bg-white px-8 py-4 rounded-full flex items-center gap-3 shadow-2xl animate-bounce border-2 border-indigo-100 active:scale-95">
+                            <span className="text-xl">🔇</span>
+                            <span className="text-indigo-600 font-black text-xs uppercase tracking-widest">ACTIVAR AUDIO</span>
+                        </button>
+                    </div>
+                )}
+              </div>
           </div>
           
           {/* PANEL DE CONTROLES (INFERIOR) */}
@@ -666,6 +664,48 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                 {t.cam_select}
               </button>
           </div>
+         {/* MODAL DE CONFIGURACIÓN PADRES (REFINADO Y ESTILIZADO)
+              Este bloque se encarga de mostrar las opciones de IA y Calidad en una tarjeta flotante. */}
+          {showSettings && (
+            <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in" onClick={() => setShowSettings(false)}>
+              <div className="bg-white w-full max-w-[300px] rounded-[3rem] p-8 shadow-2xl relative border border-white" onClick={e => e.stopPropagation()}>
+                {/* Botón X para cerrar el modal */}
+                <button onClick={() => setShowSettings(false)} className="absolute top-6 right-6 w-8 h-8 rounded-full bg-slate-50 text-slate-300 flex items-center justify-center font-black active:scale-90 transition-all">✕</button>
+                
+                <h2 className="text-xl font-black text-slate-800 mb-8 pr-8 tracking-tight">Preferencias</h2>
+                
+                <div className="space-y-8">
+                  {/* CONFIGURACIÓN DE CALIDAD DE VIDEO */}
+                  <div>
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-1">CALIDAD DE VIDEO</h3>
+                    <div className="flex bg-slate-50 p-1 rounded-[1.2rem] border border-slate-100">
+                      {['low', 'medium', 'high'].map(q => (
+                        <button key={q} onClick={() => changeQuality(q as any)} className={`flex-1 py-2.5 rounded-xl text-[9px] font-black transition-all ${videoQuality === q ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>{q.toUpperCase()}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CONFIGURACIÓN DE SENSIBILIDAD IA */}
+                  <div>
+                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-1">SENSIBILIDAD IA</h3>
+                    <div className="flex bg-slate-50 p-1 rounded-[1.2rem] border border-slate-100">
+                      {['low', 'medium', 'high'].map(s => (
+                        <button key={s} onClick={() => sendCommand('CMD_SENSITIVITY', s)} className={`flex-1 py-2.5 rounded-xl text-[9px] font-black transition-all ${sensitivity === s ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>{s.toUpperCase()}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* INDICADOR DE ESTADO DE AUDIO (Detalle de seguridad) */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+                    <h3 className="font-bold text-slate-700 text-sm">Audio del Bebé</h3>
+                    <div className={`px-4 py-2 rounded-xl font-black text-[9px] ${audioEnabled ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                      {audioEnabled ? 'EN VIVO' : 'SILENCIADO'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
       </div>
   );
 };
