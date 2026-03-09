@@ -1,3 +1,4 @@
+import { App } from '@capacitor/app';
 import React, { useEffect, useRef, useState } from 'react';
 import { Peer, MediaConnection, DataConnection } from 'peerjs';
 import QRCode from 'qrcode';
@@ -48,6 +49,8 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   const [isDimmed, setIsDimmed] = useState(false);
   const [useDefaultDim, setUseDefaultDim] = useState(true);
   const [dimBrightness, setDimBrightness] = useState(10);
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string>('');
   
   const peerRef = useRef<Peer | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -123,16 +126,11 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     }
     setConnectionToken(token);
 
-  const initializeMonitor = async () => {
+    const initializeMonitor = async () => {
       try {
         setServerStatus('connecting');
-        
-        // LEEMOS LA PREFERENCIA GUARDADA
         const savedCamera = getCameraPreference();
-        
-        // INICIAMOS CON LA CÁMARA QUE EL USUARIO PREFIRIÓ LA ÚLTIMA VEZ
         await startStream(savedCamera, 'medium');
-        
         setupPeer(token!);
         setupBattery();
         startAIAnalysisLoop(); 
@@ -141,11 +139,31 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
     };
 
     initializeMonitor();
+
+    // REGLA DE ORO: Escuchador de estado para reconexión tras bloqueo/desbloqueo
+    const handleAppStateChange = async (state: { isActive: boolean }) => {
+        // Si la aplicación vuelve a estar activa (desbloqueo de pantalla)
+        if (state.isActive) {
+            console.log(">>> TiNO: Aplicación recuperada, restaurando hardware de cámara...");
+            const savedCamera = getCameraPreference();
+            // Esperamos un segundo para que el hardware de la cámara sea liberado por el sistema operativo
+            setTimeout(() => {
+                startStream(savedCamera, 'medium');
+            }, 1000);
+        }
+    };
+
+    // Activamos el escuchador de Capacitor
+    const appListener = App.addListener('appStateChange', handleAppStateChange);
+
     const heartbeat = setInterval(() => {
         if (peerRef.current && peerRef.current.disconnected && !peerRef.current.destroyed) peerRef.current.reconnect();
     }, 5000);
 
     return () => {
+      // Limpieza del escuchador de estado
+      appListener.then(l => l.remove());
+      
       clearInterval(heartbeat);
       if (analysisIntervalRef.current) clearInterval(analysisIntervalRef.current);
       if (peerRef.current) peerRef.current.destroy();
@@ -161,28 +179,47 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
           streamRef.current.getVideoTracks().forEach(t => t.stop());
       }
 
-      // AJUSTE PRO: Ponemos mínimos para forzar la lente principal
-      const constraints = {
-          high: { 
-              width: { min: 1280, ideal: 1920 }, 
-              height: { min: 720, ideal: 1080 }, 
-              frameRate: { ideal: 20 } 
-          },
-          medium: { 
-              width: { min: 1280, ideal: 1280 }, 
-              height: { min: 720, ideal: 720 }, 
-              frameRate: { ideal: 15 } 
-          },
-          low: { 
-              width: { ideal: 640 }, 
-              height: { ideal: 480 }, 
-              frameRate: { ideal: 10 } 
-          }
+      const qualityConstraints = {
+          high: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 24 } },
+          medium: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 20 } },
+          low: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }
       };
 
       try {
+          let videoConstraints: any = { facingMode: { ideal: faceMode }, ...qualityConstraints[quality] };
+         // REGLA DE ORO: Selección inteligente del sensor principal (Fix Huawei/Samsung)
+          if (faceMode === 'environment') {
+              const devices = await navigator.mediaDevices.enumerateDevices();
+              const videoDevices = devices.filter(device => device.kind === 'videoinput');
+              
+              // Filtramos todas las traseras
+              const backCameras = videoDevices.filter(d => 
+                !d.label.toLowerCase().includes('front') && 
+                !d.label.toLowerCase().includes('user') &&
+                !d.label.toLowerCase().includes('delantera')
+              );
+
+              if (backCameras.length > 0) {
+                  // ESTRATEGIA: Buscamos la que explícitamente se llame "camera 0" o "0"
+                  // ya que la telemetría demostró que es el sensor principal.
+                  const mainSensor = backCameras.find(d => 
+                    d.label.toLowerCase().includes('camera 0') || 
+                    d.label.toLowerCase().includes('lente 0') ||
+                    d.label.includes('id 0')
+                  ) || backCameras[backCameras.length - 1]; // Si no hay "0", tomamos la última que suele ser la principal en Huawei.
+
+                  videoConstraints = {
+                      deviceId: { exact: mainSensor.deviceId },
+                      ...qualityConstraints[quality],
+                      // Eliminamos la proporción forzada para que el sensor use su formato nativo (Evita estiramiento)
+                      aspectRatio: { ideal: 1.3333333333 } // 4:3 es el estándar de sensores de alta resolución
+                  };
+                  console.log(">>> TiNO: Seleccionando Sensor Principal:", mainSensor.label);
+              }
+          }
+
           const mediaStream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: { ideal: faceMode }, ...constraints[quality] },
+              video: videoConstraints,
               audio: existingAudioTrack ? false : { echoCancellation: true, noiseSuppression: true }
           });
 
@@ -193,13 +230,20 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
               streamRef.current.addTrack(newVideoTrack);
               activeCallsRef.current.forEach(call => {
                   const videoSender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
-                  if (videoSender) videoSender.replaceTrack(newVideoTrack).catch(e => console.error(e));
+                  if (videoSender) videoSender.replaceTrack(newVideoTrack).catch(e => console.error("Error reemplazando track:", e));
               });
           } else {
               streamRef.current = mediaStream;
           }
 
           setFacingMode(faceMode);
+          // Capturamos la lista completa y la ID de la cámara que se abrió
+          const allDevices = await navigator.mediaDevices.enumerateDevices();
+          setAvailableCameras(allDevices.filter(d => d.kind === 'videoinput'));
+          const activeTrack = streamRef.current?.getVideoTracks()[0];
+          if (activeTrack) {
+              setActiveCameraId(activeTrack.getSettings().deviceId || '');
+          }
           setCurrentQuality(quality);
 
           if (localVideoRef.current) {
@@ -214,9 +258,11 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
           });
 
       } catch (error) {
-          console.error("Error en lentes, reintentando modo compatible...", error);
-          // Si los mínimos fallan, reintentamos sin mínimos (modo seguro)
-          const fallback = await navigator.mediaDevices.getUserMedia({ video: { facingMode: faceMode } });
+          console.error("Fallo en selección de ID, usando modo compatible...", error);
+          // Si falla la ID específica, volvemos al modo genérico pero sin restricciones agresivas
+          const fallback = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: faceMode } 
+          });
           streamRef.current = fallback;
           if (localVideoRef.current) localVideoRef.current.srcObject = fallback;
       }
@@ -294,21 +340,28 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
             }
         });
 
-        conn.on('data', (data: any) => { 
+      conn.on('data', (data: any) => { 
             if (data?.type === 'CMD_FLASH') toggleFlash(data.value); 
             if (data?.type === 'CMD_LULLABY') toggleLullaby(Number(data.value));
             if (data?.type === 'CMD_QUALITY') changeQuality(data.value);
             if (data?.type === 'CMD_CAMERA') changeCamera(data.value);
+            
+            // REGLA DE ORO: Sincronización del icono de voz (Nuevo)
+            if (data?.type === 'INFO_VOICE_STATUS') {
+                setIsReceivingVoice(data.value);
+            }
+
+            // REGLA DE ORO: Watchdog original preservado íntegramente
             if (data?.type === 'CMD_WATCHDOG_REFRESH') {
-            // REGLA DE ORO: En lugar de confiar en la memoria 'suelta', 
-            // leemos directamente la preferencia real guardada en el baúl.
-            const currentActualCamera = getCameraPreference();
-            
-            console.log(">>> Watchdog: Refrescando con la cámara real guardada:", currentActualCamera);
-            
-            // Forzamos el inicio con la cámara correcta
-            startStream(currentActualCamera, currentQuality);
-        }
+                // En lugar de confiar en la memoria 'suelta', 
+                // leemos directamente la preferencia real guardada en el baúl.
+                const currentActualCamera = getCameraPreference();
+                
+                console.log(">>> Watchdog: Refrescando con la cámara real guardada:", currentActualCamera);
+                
+                // Forzamos el inicio con la cámara correcta
+                startStream(currentActualCamera, currentQuality);
+            }
         });
 
         conn.on('close', () => { 
@@ -616,6 +669,28 @@ const toggleLullaby = (mode: number) => {
               <p className="text-sm font-bold tracking-widest uppercase opacity-50">{t.power_save}</p>
           </div>
       )}
+      {/* PANEL DE TELEMETRÍA (DEBUG): Solo para identificar las lentes en Huawei */}
+      <div className="absolute top-20 left-4 z-[70] pointer-events-none">
+          <div className="bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/20 max-w-[180px]">
+              <p className="text-[7px] font-black text-white/40 uppercase tracking-widest mb-2">Hardware Telemetry</p>
+              <div className="space-y-1.5">
+                  {availableCameras.map((cam, idx) => {
+                      const isActive = cam.deviceId === activeCameraId;
+                      return (
+                          <div key={cam.deviceId} className="flex items-start gap-2">
+                              <div className={`w-1.5 h-1.5 rounded-full mt-1 ${isActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/20'}`} />
+                              <div className="flex flex-col">
+                                  <p className={`text-[9px] font-bold leading-none ${isActive ? 'text-white' : 'text-white/40'}`}>
+                                      Lente {idx}: {cam.label || 'Cámara Protegida'}
+                                  </p>
+                                  {isActive && <p className="text-[7px] text-emerald-400 font-mono mt-0.5">ACTIVA</p>}
+                              </div>
+                          </div>
+                      );
+                  })}
+              </div>
+          </div>
+      </div>
     </div>
   );
 };

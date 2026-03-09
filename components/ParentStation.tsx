@@ -1,3 +1,4 @@
+import { App } from '@capacitor/app';
 import React, { useEffect, useRef, useState } from 'react';
 import { Peer, MediaConnection, DataConnection } from 'peerjs';
 import jsQR from 'jsqr';
@@ -57,7 +58,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const scannerCanvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
 
-  useEffect(() => {
+useEffect(() => {
     const saved = secureStorage.getItem<MonitorHistoryItem[]>('monitor_history') || [];
     setHistory(saved);
     
@@ -102,8 +103,22 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     });
 
     peerRef.current = peer;
+
+    // INICIAMOS PRE-CALENTAMIENTO
+    preWarmMicrophone();
+
+    // REGLA DE ORO: Recuperar micrófono tras desbloqueo
+    const appListener = App.addListener('appStateChange', (state) => {
+        if (state.isActive) {
+            console.log(">>> TiNO: Padre re-activado, verificando micrófono...");
+            preWarmMicrophone();
+        }
+    });
+
     return () => { 
-        peer.destroy(); stopScanner(); 
+        peer.destroy(); 
+        stopScanner(); 
+        appListener.then(l => l.remove());
         if(localStreamRef.current) localStreamRef.current.getTracks().forEach(t=>t.stop()); 
         if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
     };
@@ -144,19 +159,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
         if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
     };
   }, [isConnected]);
-
-  // REGLA DE ORO: Pre-calentar micrófono para audio instantáneo
-  const preWarmMicrophone = async () => {
-      try {
-          if (!localStreamRef.current) {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              stream.getAudioTracks().forEach(track => track.enabled = false);
-              localStreamRef.current = stream;
-          }
-      } catch (e) {
-          console.error("No se pudo pre-activar el micrófono:", e);
-      }
-  };
 
   const handleConnect = async (targetId: string, token?: string) => {
     if (!targetId || !peerRef.current) return;
@@ -212,38 +214,57 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
       }
   };
   
-  const toggleTalk = async (talking: boolean) => { 
+    // REGLA DE ORO: Pre-calentar micrófono para evitar el retraso de 1.5s al hablar
+  const preWarmMicrophone = async () => {
+      try {
+          if (!localStreamRef.current || localStreamRef.current.getAudioTracks()[0].readyState === 'ended') {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              // Mantenemos el track DESACTIVADO para evitar ecos y ahorrar batería
+              stream.getAudioTracks().forEach(track => track.enabled = false);
+              localStreamRef.current = stream;
+              console.log(">>> TiNO: Micrófono pre-calentado y listo.");
+          }
+      } catch (e) {
+          console.error("Error en pre-calentamiento:", e);
+      }
+  };
+
+const toggleTalk = async (talking: boolean) => { 
       setIsTalking(talking); 
+      
+      // Enviamos comando de datos para forzar el encendido/apagado del icono en el bebé
+      if (dataConnRef.current?.open) {
+          dataConnRef.current.send({ type: 'INFO_VOICE_STATUS', value: talking });
+      }
+
       if (talking) {
           try {
-              // Pedimos el micro solo cuando vamos a hablar (para evitar acoples)
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              localStreamRef.current = stream;
-              const audioTrack = stream.getAudioTracks()[0];
+              // Verificamos si el micro sigue vivo tras un posible bloqueo
+              if (!localStreamRef.current || localStreamRef.current.getAudioTracks()[0].readyState === 'ended') {
+                  localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+              }
+              
+              const audioTrack = localStreamRef.current.getAudioTracks()[0];
+              audioTrack.enabled = true; // ACTIVACIÓN INSTANTÁNEA
               
               if (peerRef.current && connectionId) {
-                  // Si no hay llamada activa, la creamos
-                  if (!talkCallRef.current) {
-                      talkCallRef.current = peerRef.current.call(connectionId, stream);
-                  } else {
-                      // Si ya existe, reemplazamos el track por el nuevo activo
-                      const sender = talkCallRef.current.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
-                      if (sender) sender.replaceTrack(audioTrack);
-                  }
+                  // Creamos la llamada de audio
+                  talkCallRef.current = peerRef.current.call(connectionId, localStreamRef.current);
               }
           } catch (e) {
-              console.error("Error micrófono:", e);
+              console.error("Error crítico de micrófono:", e);
               setIsTalking(false);
+              if (dataConnRef.current?.open) dataConnRef.current.send({ type: 'INFO_VOICE_STATUS', value: false });
           }
       } else {
-          // DETECCIÓN DE ACOPLE: Apagamos el micro físicamente al soltar
-          if (localStreamRef.current) {
-              localStreamRef.current.getTracks().forEach(track => track.stop());
-              localStreamRef.current = null;
-          }
+          // AL SOLTAR: Cerramos la llamada para que el bebé sepa que terminamos
           if (talkCallRef.current) {
               talkCallRef.current.close();
               talkCallRef.current = null;
+          }
+          // Mantenemos el micro "caliente" pero sordo
+          if (localStreamRef.current) {
+              localStreamRef.current.getAudioTracks().forEach(track => track.enabled = false);
           }
       }
   };
@@ -261,7 +282,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
           if (type === 'CMD_SENSITIVITY') setSensitivity(value);
       } 
   };
-  
+
   const changeQuality = (level: 'high' | 'medium' | 'low') => {
       if (dataConnRef.current?.open) {
           dataConnRef.current.send({ type: 'CMD_QUALITY', value: level });
@@ -586,13 +607,22 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
                     </div>
                 </div>
 
-                {/* BATERÍA BEBÉ CON ESTILO GLASS */}
+                {/* ETIQUETA DE BATERÍA BEBÉ (TRASLÚCIDA - RAYO INTEGRADO) */}
                 {batteryLevel !== null && (
                     <div className="absolute bottom-6 right-6 bg-white/40 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/20 shadow-sm">
                         <span className="text-slate-800 text-[10px] font-black">{Math.round(batteryLevel * 100)}%</span>
-                        <div className="w-6 h-3 border border-slate-600 rounded-[3px] p-[1.5px] relative">
-                            <div className={`h-full rounded-sm ${batteryLevel <= 0.2 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{width: `${batteryLevel * 100}%` }} />
-                            {isCharging && <span className="absolute -right-3 -top-1.5 text-[8px] animate-pulse text-emerald-600">⚡</span>}
+                        <div className="w-6 h-3 border border-slate-600 rounded-[3px] p-[1px] relative flex items-center overflow-hidden">
+                            {/* Barra de progreso de carga */}
+                            <div 
+                                className={`h-full rounded-sm transition-all duration-500 ${batteryLevel <= 0.2 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
+                                style={{width: `${batteryLevel * 100}%` }} 
+                            />
+                            {/* Rayo de carga: Ahora centrado absolutamente dentro del contenedor */}
+                            {isCharging && (
+                                <span className="absolute inset-0 flex items-center justify-center text-[7px] animate-pulse text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]">
+                                    ⚡
+                                </span>
+                            )}
                         </div>
                     </div>
                 )}

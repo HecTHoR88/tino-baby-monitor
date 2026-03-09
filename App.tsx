@@ -190,24 +190,26 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* INFO DE SISTEMA AL FINAL (BATERÍA ARRIBA, VERSIÓN ABAJO) */}
+     {/* INFO DE SISTEMA AL FINAL (BATERÍA ARRIBA CON RAYO INTEGRADO, VERSIÓN ABAJO) */}
       <div className="mt-auto mb-6 flex flex-col items-center gap-1 opacity-40">
         {localBattery && (
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold text-slate-500">{Math.round(localBattery.level * 100)}%</span>
-            <div className="w-5 h-2.5 border border-slate-400 rounded-[2px] p-[1px] relative">
+            <div className="w-5 h-2.5 border border-slate-400 rounded-[2px] p-[0.5px] relative flex items-center overflow-hidden">
               <div 
                 className={`h-full rounded-px ${localBattery.level <= 0.2 ? 'bg-rose-400' : 'bg-slate-500'}`} 
                 style={{ width: `${localBattery.level * 100}%` }} 
               />
               {localBattery.charging && (
-                <span className="absolute -right-3 -top-1.5 text-[8px] animate-pulse">⚡</span>
+                <span className="absolute inset-0 flex items-center justify-center text-[7px] animate-pulse text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]">
+                  ⚡
+                </span>
               )}
             </div>
           </div>
         )}
        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">
-         TiNO v1.7.0 - UI Symmetry & Audio Fix
+         TiNO v1.7.5 - Huawei Camera Fix & Audio Debug
        </p>
       </div>
     </div>
