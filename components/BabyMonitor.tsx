@@ -49,8 +49,6 @@ export const BabyMonitor: React.FC<BabyMonitorProps> = ({ onBack, lang }) => {
   const [isDimmed, setIsDimmed] = useState(false);
   const [useDefaultDim, setUseDefaultDim] = useState(true);
   const [dimBrightness, setDimBrightness] = useState(10);
-  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-  const [activeCameraId, setActiveCameraId] = useState<string>('');
   
   const peerRef = useRef<Peer | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -237,13 +235,6 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
           }
 
           setFacingMode(faceMode);
-          // Capturamos la lista completa y la ID de la cámara que se abrió
-          const allDevices = await navigator.mediaDevices.enumerateDevices();
-          setAvailableCameras(allDevices.filter(d => d.kind === 'videoinput'));
-          const activeTrack = streamRef.current?.getVideoTracks()[0];
-          if (activeTrack) {
-              setActiveCameraId(activeTrack.getSettings().deviceId || '');
-          }
           setCurrentQuality(quality);
 
           if (localVideoRef.current) {
@@ -369,16 +360,20 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
             setConnectedPeers(prev => prev.filter(p => p.conn !== conn)); 
         });
     });
-    peer.on('call', (call) => {
+   peer.on('call', (call) => {
         call.answer();
-        setIsReceivingVoice(true);
+        // REGLA DE ORO: No activamos el icono aquí; esperamos el comando INFO_VOICE_STATUS.
+        // Esto evita que el icono se quede pegado tras bloqueos.
         call.on('stream', (remoteStream) => {
             if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = remoteStream;
                 remoteAudioRef.current.play().catch(() => {});
             }
         });
-        call.on('close', () => setIsReceivingVoice(false));
+        // Si el padre suelta el botón o corta la llamada, limpiamos el audio en el bebé
+        call.on('close', () => {
+             if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+        });
     });
     peerRef.current = peer;
   };
@@ -668,29 +663,7 @@ const toggleLullaby = (mode: number) => {
               <span className="text-5xl animate-pulse mb-4 opacity-50">🔋</span>
               <p className="text-sm font-bold tracking-widest uppercase opacity-50">{t.power_save}</p>
           </div>
-      )}
-      {/* PANEL DE TELEMETRÍA (DEBUG): Solo para identificar las lentes en Huawei */}
-      <div className="absolute top-20 left-4 z-[70] pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-md p-3 rounded-2xl border border-white/20 max-w-[180px]">
-              <p className="text-[7px] font-black text-white/40 uppercase tracking-widest mb-2">Hardware Telemetry</p>
-              <div className="space-y-1.5">
-                  {availableCameras.map((cam, idx) => {
-                      const isActive = cam.deviceId === activeCameraId;
-                      return (
-                          <div key={cam.deviceId} className="flex items-start gap-2">
-                              <div className={`w-1.5 h-1.5 rounded-full mt-1 ${isActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/20'}`} />
-                              <div className="flex flex-col">
-                                  <p className={`text-[9px] font-bold leading-none ${isActive ? 'text-white' : 'text-white/40'}`}>
-                                      Lente {idx}: {cam.label || 'Cámara Protegida'}
-                                  </p>
-                                  {isActive && <p className="text-[7px] text-emerald-400 font-mono mt-0.5">ACTIVA</p>}
-                              </div>
-                          </div>
-                      );
-                  })}
-              </div>
-          </div>
-      </div>
+      )}   
     </div>
   );
 };

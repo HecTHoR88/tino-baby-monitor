@@ -232,37 +232,46 @@ useEffect(() => {
 const toggleTalk = async (talking: boolean) => { 
       setIsTalking(talking); 
       
-      // Enviamos comando de datos para forzar el encendido/apagado del icono en el bebé
+      // 1. Sincronizamos el icono en el monitor del bebé vía datos
       if (dataConnRef.current?.open) {
           dataConnRef.current.send({ type: 'INFO_VOICE_STATUS', value: talking });
       }
 
       if (talking) {
+          // REGLA DE ORO: Muteamos nuestro altavoz local para evitar acoples (eco)
+          if (videoRef.current) videoRef.current.muted = true;
+
           try {
-              // Verificamos si el micro sigue vivo tras un posible bloqueo
+              // Pedimos el micro (si no está ya activo)
               if (!localStreamRef.current || localStreamRef.current.getAudioTracks()[0].readyState === 'ended') {
                   localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
               }
               
               const audioTrack = localStreamRef.current.getAudioTracks()[0];
-              audioTrack.enabled = true; // ACTIVACIÓN INSTANTÁNEA
+              audioTrack.enabled = true; 
               
               if (peerRef.current && connectionId) {
-                  // Creamos la llamada de audio
+                  // Iniciamos llamada de voz hacia el bebé
                   talkCallRef.current = peerRef.current.call(connectionId, localStreamRef.current);
               }
           } catch (e) {
-              console.error("Error crítico de micrófono:", e);
+              console.error("Error micrófono:", e);
               setIsTalking(false);
-              if (dataConnRef.current?.open) dataConnRef.current.send({ type: 'INFO_VOICE_STATUS', value: false });
+              // Si falla, devolvemos el audio del bebé por seguridad
+              if (videoRef.current && audioEnabled) videoRef.current.muted = false;
           }
       } else {
-          // AL SOLTAR: Cerramos la llamada para que el bebé sepa que terminamos
+          // AL SOLTAR EL BOTÓN:
+          // 2. Cerramos la llamada para liberar el canal
           if (talkCallRef.current) {
               talkCallRef.current.close();
               talkCallRef.current = null;
           }
-          // Mantenemos el micro "caliente" pero sordo
+          // 3. REGLA DE ORO: Restauramos el audio del bebé en nuestro altavoz
+          if (videoRef.current && audioEnabled) {
+              videoRef.current.muted = false;
+          }
+          // Apagamos micro físicamente
           if (localStreamRef.current) {
               localStreamRef.current.getAudioTracks().forEach(track => track.enabled = false);
           }

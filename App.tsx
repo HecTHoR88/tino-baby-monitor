@@ -48,6 +48,21 @@ const App: React.FC = () => {
     const savedLang = secureStorage.getItem<Language>('tino_lang');
     if (savedLang) setLanguage(savedLang);
     refreshHistory();
+    // REGLA DE ORO: Petición de permisos unificada al inicio (Cámara y Micro)
+    const requestInitialPermissions = async () => {
+      const hasAsked = secureStorage.getItem('tino_permissions_asked');
+      if (!hasAsked && (window as any).Capacitor) {
+        try {
+          console.log(">>> TiNO: Solicitando permisos iniciales...");
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+          stream.getTracks().forEach(track => track.stop()); // Liberamos hardware de inmediato
+          secureStorage.setItem('tino_permissions_asked', 'true');
+        } catch (e) {
+          console.warn("Permisos denegados en el inicio");
+        }
+      }
+    };
+    requestInitialPermissions();
 
     // Habilitar Modo Full Screen si estamos en Capacitor
     const setupNativeEnvironment = async () => {
@@ -209,7 +224,7 @@ const App: React.FC = () => {
           </div>
         )}
        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">
-         TiNO v1.7.5 - Huawei Camera Fix & Audio Debug
+         TiNO v1.8.0 - Audio Stability & Unified Permissions
        </p>
       </div>
     </div>
@@ -410,4 +425,3 @@ const App: React.FC = () => {
 
 export default App;
 
-// para ver si el comitt funciono correctamente
