@@ -185,32 +185,24 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
 
       try {
           let videoConstraints: any = { facingMode: { ideal: faceMode }, ...qualityConstraints[quality] };
-         // REGLA DE ORO: Selección inteligente del sensor principal (Fix Huawei/Samsung)
+
           if (faceMode === 'environment') {
               const devices = await navigator.mediaDevices.enumerateDevices();
               const videoDevices = devices.filter(device => device.kind === 'videoinput');
               
-              // Filtramos todas las traseras
               const backCameras = videoDevices.filter(d => 
-                !d.label.toLowerCase().includes('front') && 
-                !d.label.toLowerCase().includes('user') &&
-                !d.label.toLowerCase().includes('delantera')
+                !d.label.toLowerCase().includes('front') && !d.label.toLowerCase().includes('user') && !d.label.toLowerCase().includes('delantera')
               );
 
               if (backCameras.length > 0) {
-                  // ESTRATEGIA: Buscamos la que explícitamente se llame "camera 0" o "0"
-                  // ya que la telemetría demostró que es el sensor principal.
                   const mainSensor = backCameras.find(d => 
-                    d.label.toLowerCase().includes('camera 0') || 
-                    d.label.toLowerCase().includes('lente 0') ||
-                    d.label.includes('id 0')
-                  ) || backCameras[backCameras.length - 1]; // Si no hay "0", tomamos la última que suele ser la principal en Huawei.
+                    d.label.toLowerCase().includes('camera 0') || d.label.toLowerCase().includes('lente 0') || d.label.includes('id 0')
+                  ) || backCameras[backCameras.length - 1];
 
                   videoConstraints = {
                       deviceId: { exact: mainSensor.deviceId },
                       ...qualityConstraints[quality],
-                      // Eliminamos la proporción forzada para que el sensor use su formato nativo (Evita estiramiento)
-                      aspectRatio: { ideal: 1.3333333333 } // 4:3 es el estándar de sensores de alta resolución
+                      aspectRatio: { ideal: 1.3333333333 }
                   };
                   console.log(">>> TiNO: Seleccionando Sensor Principal:", mainSensor.label);
               }
@@ -226,9 +218,20 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
           if (streamRef.current) {
               streamRef.current.getVideoTracks().forEach(t => streamRef.current?.removeTrack(t));
               streamRef.current.addTrack(newVideoTrack);
+              
+              // REGLA DE ORO: Broadcast de video profesional. 
+              // Actualizamos a todos los padres y evitamos que un fallo de uno detenga al resto.
               activeCallsRef.current.forEach(call => {
-                  const videoSender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
-                  if (videoSender) videoSender.replaceTrack(newVideoTrack).catch(e => console.error("Error reemplazando track:", e));
+                  try {
+                      if (call.open) {
+                          const videoSender = call.peerConnection.getSenders().find(s => s.track?.kind === 'video');
+                          if (videoSender && newVideoTrack) {
+                              videoSender.replaceTrack(newVideoTrack).catch(e => console.warn("Fallo replaceTrack en un receptor:", e));
+                          }
+                      }
+                  } catch (err) {
+                      console.error("Error en difusión de video a dispositivo:", err);
+                  }
               });
           } else {
               streamRef.current = mediaStream;
@@ -244,16 +247,16 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
               await localVideoRef.current.play().catch(() => {});
           }
 
+          // REGLA DE ORO: Notificamos el cambio de estado a TODOS los canales de datos activos
           activeDataConnsRef.current.forEach(conn => {
-              if (conn.open) conn.send({ type: 'INFO_CAMERA_TYPE', value: faceMode });
+              if (conn.open) {
+                  conn.send({ type: 'INFO_CAMERA_TYPE', value: faceMode });
+              }
           });
 
       } catch (error) {
-          console.error("Fallo en selección de ID, usando modo compatible...", error);
-          // Si falla la ID específica, volvemos al modo genérico pero sin restricciones agresivas
-          const fallback = await navigator.mediaDevices.getUserMedia({ 
-              video: { facingMode: faceMode } 
-          });
+          console.error("Error en startStream:", error);
+          const fallback = await navigator.mediaDevices.getUserMedia({ video: { facingMode: faceMode } });
           streamRef.current = fallback;
           if (localVideoRef.current) localVideoRef.current.srcObject = fallback;
       }
@@ -291,34 +294,21 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
     });
     peer.on('open', (id) => { setPeerId(id); setServerStatus('connected'); generateSecureQR(id, token); });
     peer.on('connection', (conn) => {
-        // --- LÓGICA DE VINCULACIÓN MANUAL REPARADA ---
         conn.on('open', () => { 
             activeDataConnsRef.current.push(conn);
-            
             const parentName = (conn.metadata as any)?.name || 'Padre';
             const parentDeviceId = (conn.metadata as any)?.deviceId;
 
-            // Guardamos al padre en el historial (lo que arreglamos hace un momento)
             if (parentDeviceId) {
                 const now = Date.now();
                 const existingHistory = secureStorage.getItem<MonitorHistoryItem[]>('parent_history') || [];
                 const others = existingHistory.filter(h => h.id !== parentDeviceId);
                 const oldItem = existingHistory.find(h => h.id === parentDeviceId);
-                const updatedItem = {
-                    id: parentDeviceId,
-                    name: parentName,
-                    lastConnected: now,
-                    logs: [now, ...(oldItem?.logs || [])].slice(0, 50)
-                };
+                const updatedItem = { id: parentDeviceId, name: parentName, lastConnected: now, logs: [now, ...(oldItem?.logs || [])].slice(0, 50) };
                 secureStorage.setItem('parent_history', [updatedItem, ...others].slice(0, 20));
             }
 
-            // ENVIAMOS EL NOMBRE Y EL TOKEN PARA QUE EL PADRE TENGA LA LLAVE
-            conn.send({ 
-                type: 'INFO_DEVICE_NAME', 
-                name: getDeviceName(),
-                token: token // Enviamos el token real para que el padre lo guarde
-            });
+            conn.send({ type: 'INFO_DEVICE_NAME', name: getDeviceName(), token: token });
 
             setConnectedPeers(prev => {
                 if (prev.find(p => p.deviceId === parentDeviceId)) return prev;
@@ -331,49 +321,40 @@ const startStream = async (faceMode: 'user' | 'environment', quality: 'high' | '
             }
         });
 
-      conn.on('data', (data: any) => { 
+        conn.on('data', (data: any) => { 
             if (data?.type === 'CMD_FLASH') toggleFlash(data.value); 
             if (data?.type === 'CMD_LULLABY') toggleLullaby(Number(data.value));
             if (data?.type === 'CMD_QUALITY') changeQuality(data.value);
             if (data?.type === 'CMD_CAMERA') changeCamera(data.value);
-            
-            // REGLA DE ORO: Sincronización del icono de voz (Nuevo)
-            if (data?.type === 'INFO_VOICE_STATUS') {
-                setIsReceivingVoice(data.value);
-            }
+            if (data?.type === 'INFO_VOICE_STATUS') setIsReceivingVoice(data.value);
 
-            // REGLA DE ORO: Watchdog original preservado íntegramente
+            // REGLA DE ORO: Watchdog Multidispositivo agresivo
             if (data?.type === 'CMD_WATCHDOG_REFRESH') {
-                // En lugar de confiar en la memoria 'suelta', 
-                // leemos directamente la preferencia real guardada en el baúl.
                 const currentActualCamera = getCameraPreference();
-                
-                console.log(">>> Watchdog: Refrescando con la cámara real guardada:", currentActualCamera);
-                
-                // Forzamos el inicio con la cámara correcta
+                console.log(">>> Broadcast Watchdog: Sincronizando todos los dispositivos conectados.");
+                // Al llamar a startStream, el nuevo código ya se encarga de enviarlo a todos los padres
                 startStream(currentActualCamera, currentQuality);
             }
         });
 
         conn.on('close', () => { 
+            // Limpieza de conexiones de datos
             activeDataConnsRef.current = activeDataConnsRef.current.filter(c => c !== conn); 
-            setConnectedPeers(prev => prev.filter(p => p.conn !== conn)); 
+            setConnectedPeers(prev => prev.filter(p => p.conn !== conn));
+            // Limpieza de llamadas de video huérfanas
+            activeCallsRef.current = activeCallsRef.current.filter(call => call.peer !== conn.peer);
         });
     });
-   peer.on('call', (call) => {
+
+    peer.on('call', (call) => {
         call.answer();
-        // REGLA DE ORO: No activamos el icono aquí; esperamos el comando INFO_VOICE_STATUS.
-        // Esto evita que el icono se quede pegado tras bloqueos.
         call.on('stream', (remoteStream) => {
             if (remoteAudioRef.current) {
                 remoteAudioRef.current.srcObject = remoteStream;
                 remoteAudioRef.current.play().catch(() => {});
             }
         });
-        // Si el padre suelta el botón o corta la llamada, limpiamos el audio en el bebé
-        call.on('close', () => {
-             if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
-        });
+        call.on('close', () => { if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null; });
     });
     peerRef.current = peer;
   };

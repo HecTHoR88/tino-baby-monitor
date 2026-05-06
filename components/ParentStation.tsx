@@ -43,13 +43,14 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [isCharging, setIsCharging] = useState(false);
   const [showLowBatteryWarning, setShowLowBatteryWarning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [viewMode, setViewMode] = useState<'panel' | 'monitor'>('panel');
 
   // Monitor de Red
   const [isNetworkUnstable, setIsNetworkUnstable] = useState(false);
   const lastVideoTimeRef = useRef<number>(0);
   const stabilityCheckIntervalRef = useRef<any>(null);
   
-  const peerRef = useRef<Peer | null>(null);
+ const peerRef = useRef<Peer | null>(null);
   const dataConnRef = useRef<DataConnection | null>(null);
   const talkCallRef = useRef<MediaConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null); 
@@ -57,11 +58,14 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const scannerVideoRef = useRef<HTMLVideoElement>(null);
   const scannerCanvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
+  const viewModeRef = useRef<'panel' | 'monitor'>('panel');
 
-useEffect(() => {
-    const saved = secureStorage.getItem<MonitorHistoryItem[]>('monitor_history') || [];
-    setHistory(saved);
-    
+  // REGLA DE ORO: Inicializador del Motor de Conexión.
+  // Extraemos esta lógica para poder crear un "motor nuevo" cuando el anterior muera en el bolsillo.
+ const initPeerEngine = () => {
+    if (peerRef.current && !peerRef.current.destroyed) return;
+
+    console.log(">>> TiNO: Iniciando motor de conexión pasivo...");
     const peer = new Peer(undefined as any, { 
         config: { 
             iceServers: [
@@ -75,7 +79,7 @@ useEffect(() => {
         },
         debug: 1
     });
-    
+
     peer.on('error', (err) => {
         if (err.type === 'peer-unavailable') {
             setConnectionStatus(t.conn_error);
@@ -83,12 +87,10 @@ useEffect(() => {
         }
     });
 
-    peer.on('open', () => {
-        if (initialTargetId) {
-            setConnectionId(initialTargetId);
-            const item = saved?.find(h => h.id === initialTargetId);
-            handleConnect(initialTargetId, item?.token);
-        }
+    // REGLA DE ORO: El motor ya no marca automáticamente al abrirse. 
+    // Solo se queda esperando a que el usuario decida conectar.
+    peer.on('open', (id) => {
+        console.log(">>> TiNO: Motor Peer listo con ID:", id);
     });
 
     peer.on('call', (call) => {
@@ -96,34 +98,75 @@ useEffect(() => {
         call.on('stream', (remoteStream) => {
             if (videoRef.current) {
                 videoRef.current.srcObject = remoteStream;
-                videoRef.current.muted = true;
-                videoRef.current.play().catch(() => {});
+                videoRef.current.muted = !audioEnabled;
+                videoRef.current.play().catch((err) => {
+                    console.warn(">>> TiNO: Audio bloqueado por sistema, requiere acción manual.", err);
+                    setAudioEnabled(false);
+                });
             }
         });
     });
 
     peerRef.current = peer;
+  };
 
-    // INICIAMOS PRE-CALENTAMIENTO
+ // REGLA DE ORO: Función de reconexión total corregida.
+  // Limpia el motor zombi y dispara la conexión automática al último ID exitoso.
+  const forceFullReconnect = () => {
+      console.log(">>> TiNO: Iniciando ciclo de recuperación total...");
+      setIsNetworkUnstable(false);
+      
+      // 1. Obtenemos el ID del almacenamiento antes de destruir nada
+      const lastId = localStorage.getItem('tino_last_connection_id');
+      
+      // 2. Destruimos el motor viejo para liberar el puerto
+      if (peerRef.current) {
+          peerRef.current.destroy();
+          peerRef.current = null;
+      }
+      
+      // 3. Si tenemos un ID, usamos handleConnect. 
+      // handleConnect es inteligente: si ve que el motor no existe, lo creará solo.
+      if (lastId) {
+          handleConnect(lastId);
+      } else {
+          // Si no hay ID previo, solo preparamos el motor para el futuro
+          initPeerEngine();
+      }
+  };
+
+  // BLOQUE PRINCIPAL DE CICLO DE VIDA
+  useEffect(() => {
+    const saved = secureStorage.getItem<MonitorHistoryItem[]>('monitor_history') || [];
+    setHistory(saved);
+    
+    // 1. Arrancamos el motor por primera vez
+    initPeerEngine();
     preWarmMicrophone();
 
-    // REGLA DE ORO: Recuperar micrófono tras desbloqueo
+    // 2. REGLA DE ORO: Escuchador de ciclo de vida (WhatsApp Fix)
     const appListener = App.addListener('appStateChange', (state) => {
         if (state.isActive) {
-            console.log(">>> TiNO: Padre re-activado, verificando micrófono...");
+            console.log(">>> TiNO: App recuperada.");
             preWarmMicrophone();
+            
+            // REGLA DE ORO: Solo reconectamos si la referencia indica que estábamos en el monitor
+            // Esto evita que se conecte solo si estábamos en el panel del QR.
+            if (viewModeRef.current === 'monitor') {
+                console.log(">>> TiNO: Forzando reconexión tras inactividad...");
+                forceFullReconnect();
+            }
         }
     });
 
     return () => { 
-        peer.destroy(); 
+        if (peerRef.current) peerRef.current.destroy(); 
         stopScanner(); 
         appListener.then(l => l.remove());
         if(localStreamRef.current) localStreamRef.current.getTracks().forEach(t=>t.stop()); 
         if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
     };
-  }, []);
-
+  }, []); // REGLA DE ORO: Siempre vacío para que la conexión no se rompa al cambiar de pantalla
 // Monitor de Estabilidad con Auto-Reparación (Watchdog)
   useEffect(() => {
     let frozenCount = 0; // Contador de segundos congelado
@@ -160,11 +203,23 @@ useEffect(() => {
     };
   }, [isConnected]);
 
-  const handleConnect = async (targetId: string, token?: string) => {
-    if (!targetId || !peerRef.current) return;
+ const handleConnect = async (targetId: string, token?: string) => {
+    // REGLA DE ORO: Verificación de salud del motor antes de marcar
+    if (!peerRef.current || peerRef.current.destroyed || !peerRef.current.open) {
+        if (!peerRef.current || peerRef.current.destroyed) {
+            initPeerEngine();
+        }
+        // Aumentamos a 800ms para dar tiempo a que el servidor de PeerJS responda
+        console.log(">>> TiNO: Esperando a que el motor tenga señal...");
+        setTimeout(() => handleConnect(targetId, token), 800);
+        return;
+    }
+
+    console.log(">>> TiNO: Intentando conectar a:", targetId);
     setConnectionStatus(t.connecting);
+    setViewMode('monitor');
+    viewModeRef.current = 'monitor';
     
-    // Enviamos un token temporal si es manual para que el bebé nos deje entrar
     const conn = peerRef.current.connect(targetId, {
         metadata: { 
             name: getDeviceName(), 
@@ -174,33 +229,30 @@ useEffect(() => {
     });
 
     conn.on('open', () => { 
-        setIsConnected(true); 
+        setIsConnected(true);
+        // Guardamos esta ID como la última exitosa para la recuperación de WhatsApp
+        localStorage.setItem('tino_last_connection_id', targetId);
+        if (videoRef.current) {
+            videoRef.current.muted = !audioEnabled;
+        } 
         setConnectionStatus("");
     });
 
     conn.on('data', (data: any) => { 
-        if (data?.type === 'ERROR_AUTH') { 
-            alert(data.message || "Error de autorización"); 
-            conn.close(); 
-            return; 
-        }
-        
-        // RECIBIR NOMBRE Y EL TOKEN REAL DEL BEBÉ
-        if (data?.type === 'INFO_DEVICE_NAME') {
-            // Guardamos el ID de 6 números junto con su token real
-            addToHistory(targetId, data.name, data.token || token);
-        }
-
+        if (data?.type === 'ERROR_AUTH') { alert(data.message || "Error"); setViewMode('panel'); return; }
+        if (data?.type === 'INFO_DEVICE_NAME') addToHistory(targetId, data.name, data.token || token);
         if (data?.type === 'INFO_CAMERA_TYPE') setRemoteFacingMode(data.value);
-        if (data?.type === 'BATTERY_STATUS') {
-            setBatteryLevel(data.level);
-            setIsCharging(data.charging);
-        }
+        if (data?.type === 'BATTERY_STATUS') { setBatteryLevel(data.level); setIsCharging(data.charging); }
     });
 
     conn.on('error', (err: any) => {
-        alert("Fallo de conexión: ID no encontrado");
+        console.error("Error de conexión:", err);
         setIsConnected(false);
+        // Si falla, permitimos volver al panel para reintentar
+        if (viewMode === 'monitor' && !isConnected) {
+            alert("No se pudo establecer conexión. Verifique el ID.");
+            setViewMode('panel');
+        }
     });
 
     conn.on('close', () => { setIsConnected(false); });
@@ -415,14 +467,24 @@ const toggleTalk = async (talking: boolean) => {
     });
   };
 
-  if (!isConnected) return (
+  if (viewMode === 'panel') return (
       <div className="flex flex-col h-full overflow-hidden relative font-sans" style={V85_GRADIENT}>
           
           {/* HEADER PREMIUM COMPACTO */}
           <div className="p-8 pb-4 flex items-center justify-between relative">
-              <button onClick={onBack} className="w-12 h-12 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-slate-400 active:scale-90 transition-all">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path d="M15 19l-7-7 7-7" /></svg>
-              </button>
+            <button 
+    onClick={() => {
+        // REGLA DE ORO: Sincronizamos estado y referencia antes de salir
+        setViewMode('panel'); 
+        viewModeRef.current = 'panel'; 
+        onBack(); 
+    }} 
+    className="w-12 h-12 rounded-full bg-white/90 backdrop-blur shadow-sm flex items-center justify-center text-slate-400 active:scale-90 transition-all"
+>
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+        <path d="M15 19l-7-7 7-7" />
+    </svg>
+</button>
               <h2 className="absolute left-1/2 -translate-x-1/2 text-xl font-black text-slate-800 tracking-tighter">Panel de Control</h2>
           </div>
 
@@ -571,9 +633,20 @@ const toggleTalk = async (talking: boolean) => {
                   <button onClick={() => setShowSettings(true)} className="bg-white shadow-xl w-10 h-10 rounded-full flex items-center justify-center text-slate-700 active:scale-90 transition-all border border-white/50">
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                   </button>
-                  <button onClick={() => { setIsConnected(false); if(peerRef.current) peerRef.current.destroy(); }} className="bg-white shadow-xl w-10 h-10 rounded-full flex items-center justify-center text-rose-500 active:scale-90 transition-all border border-white/50">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M6 18L18 6M6 6l12 12"/></svg>
-                  </button>
+                  <button 
+    onClick={() => { 
+        // REGLA DE ORO: Cerramos conexión y avisamos al cerebro que volvimos al panel
+        setIsConnected(false); 
+        setViewMode('panel'); 
+        viewModeRef.current = 'panel'; 
+        if(peerRef.current) peerRef.current.destroy(); 
+    }} 
+    className="bg-white shadow-xl w-10 h-10 rounded-full flex items-center justify-center text-rose-500 active:scale-90 transition-all border border-white/50"
+>
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+        <path d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+</button>
               </div>
           </div>
 
