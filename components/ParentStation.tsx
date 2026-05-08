@@ -44,6 +44,7 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const [showLowBatteryWarning, setShowLowBatteryWarning] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [viewMode, setViewMode] = useState<'panel' | 'monitor'>('panel');
+  const [errorModal, setErrorModal] = useState<{show: boolean, title: string, msg: string}>({show: false, title: '', msg: ''});
 
   // Monitor de Red
   const [isNetworkUnstable, setIsNetworkUnstable] = useState(false);
@@ -59,21 +60,17 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   const scannerCanvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const viewModeRef = useRef<'panel' | 'monitor'>('panel');
+  const connectionTimeoutRef = useRef<any>(null);
 
-  // REGLA DE ORO: Inicializador del Motor de Conexión.
-  // Extraemos esta lógica para poder crear un "motor nuevo" cuando el anterior muera en el bolsillo.
- const initPeerEngine = () => {
+  const initPeerEngine = () => {
     if (peerRef.current && !peerRef.current.destroyed) return;
 
-    console.log(">>> TiNO: Iniciando motor de conexión pasivo...");
+    console.log(">>> TiNO: Iniciando motor de conexión...");
     const peer = new Peer(undefined as any, { 
         config: { 
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
+                { urls: 'stun:stun1.l.google.com:19302' }
             ],
             iceCandidatePoolSize: 10
         },
@@ -87,23 +84,37 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
         }
     });
 
-    // REGLA DE ORO: El motor ya no marca automáticamente al abrirse. 
-    // Solo se queda esperando a que el usuario decida conectar.
+    // REGLA DE ORO: El motor detecta si debe reconectar al recibir señal de internet
     peer.on('open', (id) => {
-        console.log(">>> TiNO: Motor Peer listo con ID:", id);
+        console.log(">>> TiNO: Motor listo. ID asignada:", id);
+        const lastId = localStorage.getItem('tino_last_connection_id');
+        
+        // Si el Wi-Fi volvió y estábamos vigilando al bebé, conectamos de inmediato
+        if (viewModeRef.current === 'monitor' && lastId && !isConnected) {
+            console.log(">>> TiNO: Internet recuperado, reconectando con el bebé...");
+            handleConnect(lastId);
+        }
     });
 
-    peer.on('call', (call) => {
+   peer.on('call', (call) => {
         call.answer(); 
         call.on('stream', (remoteStream) => {
-            if (videoRef.current) {
-                videoRef.current.srcObject = remoteStream;
-                videoRef.current.muted = !audioEnabled;
-                videoRef.current.play().catch((err) => {
-                    console.warn(">>> TiNO: Audio bloqueado por sistema, requiere acción manual.", err);
-                    setAudioEnabled(false);
-                });
-            }
+            setTimeout(() => {
+                if (videoRef.current) {
+                    videoRef.current.srcObject = null; 
+                    lastVideoTimeRef.current = -1; 
+                    videoRef.current.srcObject = remoteStream;
+                    videoRef.current.muted = !audioEnabled;
+                    
+                    // REGLA DE ORO: Si el video logra reproducirse, quitamos la alerta AL INSTANTE
+                    videoRef.current.play()
+                        .then(() => {
+                            console.log(">>> TiNO: Video fluyendo, limpiando alertas.");
+                            setIsNetworkUnstable(false); 
+                        })
+                        .catch(() => setAudioEnabled(false));
+                }
+            }, 100);
         });
     });
 
@@ -114,7 +125,6 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
   // Limpia el motor zombi y dispara la conexión automática al último ID exitoso.
   const forceFullReconnect = () => {
       console.log(">>> TiNO: Iniciando ciclo de recuperación total...");
-      setIsNetworkUnstable(false);
       
       // 1. Obtenemos el ID del almacenamiento antes de destruir nada
       const lastId = localStorage.getItem('tino_last_connection_id');
@@ -167,78 +177,112 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
         if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
     };
   }, []); // REGLA DE ORO: Siempre vacío para que la conexión no se rompa al cambiar de pantalla
-// Monitor de Estabilidad con Auto-Reparación (Watchdog)
+    
+ // REGLA DE ORO: Watchdog v2.7 (Sin conflictos de estado)
   useEffect(() => {
-    let frozenCount = 0; // Contador de segundos congelado
+    let frozenCount = 0;
+    let longOutageCount = 0;
+    lastVideoTimeRef.current = -1; 
 
-    if (isConnected) {
-        stabilityCheckIntervalRef.current = setInterval(() => {
-            if (videoRef.current && !videoRef.current.paused) {
-                const currentTime = videoRef.current.currentTime;
-                
-                if (currentTime === lastVideoTimeRef.current) {
-                    frozenCount += 3; // Sumamos los 3 segundos del intervalo
-                    
-                    // Nivel 1: Aviso visual (3 segundos)
-                    setIsNetworkUnstable(true);
-                    
-                    // Nivel 2: Auto-reparación (Más de 7 segundos congelado)
-                    if (frozenCount >= 7) {
-                        console.warn(">>> Watchdog: Video congelado detectado. Refrescando...");
-                        sendCommand('CMD_WATCHDOG_REFRESH', true);
-                        frozenCount = 0; // Reseteamos contador para esperar el nuevo stream
-                    }
-                } else {
-                    // Si el video se mueve, todo está bien
-                    setIsNetworkUnstable(false);
-                    frozenCount = 0;
-                }
-                lastVideoTimeRef.current = currentTime;
+    const stabilityInterval = setInterval(() => {
+        if (viewModeRef.current === 'monitor') {
+            const video = videoRef.current;
+            
+            // 1. SI EL VIDEO SE MUEVE: Limpieza absoluta (Manda el video)
+            if (video && !video.paused && video.currentTime > lastVideoTimeRef.current) {
+                setIsNetworkUnstable(false); 
+                frozenCount = 0;
+                longOutageCount = 0;
+                lastVideoTimeRef.current = video.currentTime;
+                return; 
             }
-        }, 3000); 
-    }
 
-    return () => {
-        if(stabilityCheckIntervalRef.current) clearInterval(stabilityCheckIntervalRef.current);
-    };
+            // 2. SI EL VIDEO ESTÁ DETENIDO
+            if (isConnected) {
+                // Solo contamos como "congelado" si el video ya había empezado (tiempo > 0)
+                if (video && video.currentTime > 0) {
+                    frozenCount++;
+                    if (frozenCount >= 2) setIsNetworkUnstable(true);
+                    if (frozenCount >= 4) {
+                        console.warn(">>> Watchdog: Video congelado. Reconectando...");
+                        forceFullReconnect();
+                        frozenCount = 0;
+                    }
+                }
+            } else {
+                // 3. CASO: DESCONECTADO (Wi-Fi Apagado)
+                // NO forzamos setIsNetworkUnstable(true) aquí para no chocar con la reconexión.
+                // La alerta la activará handleConnect si detecta error persistente.
+                longOutageCount++;
+                if (longOutageCount >= 10) {
+                    forceFullReconnect();
+                    longOutageCount = 0;
+                }
+            }
+        }
+    }, 3000);
+
+    return () => clearInterval(stabilityInterval);
   }, [isConnected]);
+  
 
  const handleConnect = async (targetId: string, token?: string) => {
-    // REGLA DE ORO: Verificación de salud del motor antes de marcar
     if (!peerRef.current || peerRef.current.destroyed || !peerRef.current.open) {
-        if (!peerRef.current || peerRef.current.destroyed) {
-            initPeerEngine();
-        }
-        // Aumentamos a 800ms para dar tiempo a que el servidor de PeerJS responda
-        console.log(">>> TiNO: Esperando a que el motor tenga señal...");
+        if (!peerRef.current || peerRef.current.destroyed) initPeerEngine();
         setTimeout(() => handleConnect(targetId, token), 800);
         return;
     }
 
-    console.log(">>> TiNO: Intentando conectar a:", targetId);
+    if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
     setConnectionStatus(t.connecting);
+    setIsNetworkUnstable(false);
+
+    if (viewModeRef.current === 'panel') {
+        connectionTimeoutRef.current = setTimeout(() => {
+            if (!isConnected && viewModeRef.current === 'monitor') {
+                setErrorModal({ show: true, title: "Monitor no disponible", msg: "No se pudo establecer conexión. Verifique el monitor del bebé." });
+                setViewMode('panel');
+                viewModeRef.current = 'panel';
+            }
+        }, 7000);
+    }
+
     setViewMode('monitor');
     viewModeRef.current = 'monitor';
     
     const conn = peerRef.current.connect(targetId, {
-        metadata: { 
-            name: getDeviceName(), 
-            deviceId: getDeviceId(), 
-            token: token || 'VINCULACION_MANUAL' 
-        }
+        metadata: { name: getDeviceName(), deviceId: getDeviceId(), token: token || 'VINCULACION_MANUAL' }
     });
 
     conn.on('open', () => { 
+        setIsNetworkUnstable(false); 
+        if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
         setIsConnected(true);
-        // Guardamos esta ID como la última exitosa para la recuperación de WhatsApp
         localStorage.setItem('tino_last_connection_id', targetId);
+        
+        // REGLA DE ORO: Sincronización automática tras reconexión.
+        // Forzamos al bebé a que nos envíe video fresco para eliminar el LAG (cuadros viejos).
+        conn.send({ type: 'CMD_WATCHDOG_REFRESH', value: true });
+
         if (videoRef.current) {
             videoRef.current.muted = !audioEnabled;
+            videoRef.current.play().catch(() => {});
         } 
         setConnectionStatus("");
     });
 
     conn.on('data', (data: any) => { 
+        if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
+        
+        // REGLA DE ORO: Detección de cierre voluntario del monitor del bebé
+        if (data?.type === 'CMD_SHUTDOWN') {
+            setErrorModal({ show: true, title: "Monitor Desconectado", msg: "El monitor del bebé ha dejado de transmitir." });
+            setViewMode('panel');
+            viewModeRef.current = 'panel';
+            if (peerRef.current) peerRef.current.destroy();
+            return;
+        }
+
         if (data?.type === 'ERROR_AUTH') { alert(data.message || "Error"); setViewMode('panel'); return; }
         if (data?.type === 'INFO_DEVICE_NAME') addToHistory(targetId, data.name, data.token || token);
         if (data?.type === 'INFO_CAMERA_TYPE') setRemoteFacingMode(data.value);
@@ -246,16 +290,18 @@ export const ParentStation: React.FC<ParentStationProps> = ({ onBack, initialTar
     });
 
     conn.on('error', (err: any) => {
-        console.error("Error de conexión:", err);
         setIsConnected(false);
-        // Si falla, permitimos volver al panel para reintentar
-        if (viewMode === 'monitor' && !isConnected) {
-            alert("No se pudo establecer conexión. Verifique el ID.");
-            setViewMode('panel');
+        if (viewModeRef.current === 'monitor') {
+            setIsNetworkUnstable(true);
+            setTimeout(() => forceFullReconnect(), 10000);
         }
     });
 
-    conn.on('close', () => { setIsConnected(false); });
+    conn.on('close', () => { 
+        if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
+        setIsConnected(false); 
+        if (viewModeRef.current === 'monitor') setIsNetworkUnstable(true);
+    });
     dataConnRef.current = conn;
   };
 
@@ -600,6 +646,26 @@ const toggleTalk = async (talking: boolean) => {
                   )}
               </div>
           </div>
+            {/* MODAL DE ERROR PREMIUM (Sustituye al alert básico) */}
+          {errorModal.show && (
+            <div className="fixed inset-0 z-[110] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-fade-in">
+              <div className="bg-white w-full max-w-[300px] rounded-[2.5rem] p-8 shadow-2xl flex flex-col items-center border border-white">
+                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mb-4 border border-rose-100">
+                    <span className="text-3xl">⚠️</span>
+                </div>
+                <h3 className="text-lg font-black text-slate-800 text-center mb-2">{errorModal.title}</h3>
+                <p className="text-slate-400 text-[11px] font-bold text-center leading-relaxed mb-8 px-2">
+                    {errorModal.msg}
+                </p>
+                <button 
+                  onClick={() => setErrorModal({show: false, title: '', msg: ''})}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] tracking-widest uppercase shadow-lg active:scale-95 transition-all"
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
+          )}
       </div>
   );
 
@@ -616,17 +682,21 @@ const toggleTalk = async (talking: boolean) => {
                   </div>
 
                   <button 
-                      onClick={() => {
-                          if (dataConnRef.current?.open) {
-                              dataConnRef.current.send({ type: 'CMD_WATCHDOG_REFRESH', value: true });
-                              setConnectionStatus("..."); 
-                              setTimeout(() => setConnectionStatus(""), 2000);
-                          }
-                      }}
-                      className="bg-white/90 backdrop-blur-md w-10 h-10 rounded-full flex items-center justify-center text-slate-400 shadow-lg border border-white/50 active:scale-90 transition-all"
-                  >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                  </button>
+    onClick={() => {
+        // REGLA DE ORO: Borrado forzado de la alerta al tocar el botón
+        setIsNetworkUnstable(false); 
+        setConnectionStatus("..."); 
+        if (!dataConnRef.current || !dataConnRef.current.open) {
+            forceFullReconnect();
+        } else {
+            dataConnRef.current.send({ type: 'CMD_WATCHDOG_REFRESH', value: true });
+        }
+        setTimeout(() => setConnectionStatus(""), 2000);
+    }}
+    className="bg-white/90 backdrop-blur-md w-10 h-10 rounded-full flex items-center justify-center text-slate-400 shadow-lg border border-white/50 active:scale-90 transition-all"
+>
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+</button>
               </div>
 
               <div className="flex gap-2 items-center">
@@ -652,8 +722,8 @@ const toggleTalk = async (talking: boolean) => {
 
           {/* SECCIÓN 2: VISOR DE VIDEO EXPANDIDO
               px-1 para márgenes laterales mínimos. h-[62vh] para que toque el panel inferior pero sea responsivo. */}
-          <div className="flex-none w-full px-1 pt-16">
-              <div className={`w-full h-[62vh] rounded-2xl overflow-hidden relative shadow-2xl border-[3px] transition-all duration-700 ${isConnected ? 'border-emerald-400' : 'border-white'} bg-slate-900`}>
+          <div className="flex-none w-full px-1 pt-16">    
+          <div className={`w-full h-[62vh] rounded-2xl overflow-hidden relative shadow-2xl border-[3px] transition-all duration-700 ${isConnected ? (isNetworkUnstable ? 'border-amber-400' : 'border-emerald-400') : 'border-white'} bg-slate-900`}>
                 <video 
                   ref={videoRef} 
                   autoPlay 
@@ -665,6 +735,19 @@ const toggleTalk = async (talking: boolean) => {
                     filter: isNightVision ? 'brightness(1.5) contrast(1.2) saturate(0.8)' : 'none'
                   }} 
                 />
+
+                {/* NUEVO: MENSAJE DE ALERTA VISUAL (Se activa si el video se congela o la red falla) */}
+                {isNetworkUnstable && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-[45] animate-fade-in">
+                        <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-3 border-2 border-amber-400">
+                            <span className="text-4xl animate-pulse">⚠️</span>
+                            <div className="text-center">
+                                <p className="text-slate-800 font-black text-xs uppercase tracking-widest leading-none mb-1">Conexión Perdida</p>
+                                <p className="text-[10px] text-slate-400 font-bold">Intentando recuperar vídeo...</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* EFECTO DE FLASH VISUAL (REINCORPORADO) */}
                 {isFlashing && (

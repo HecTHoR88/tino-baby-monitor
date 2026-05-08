@@ -224,7 +224,7 @@ const App: React.FC = () => {
           </div>
         )}
        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">
-         TiNO v1.9.2 - Multi-Device Sync & Resilient Connection
+         TiNO v1.9.5 - Global Sync & Resilient Watchdog.
        </p>
       </div>
     </div>
